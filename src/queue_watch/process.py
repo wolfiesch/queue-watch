@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
+import os
 import re
 import shlex
+import signal
 from typing import Any
 
 
@@ -29,22 +32,29 @@ def over_ssh(host: str, argv: list[str], cwd: str | None = None) -> list[str]:
 async def run_json(
     argv: list[str], *, stdin: str | None = None, timeout: float = 25, cwd: str | None = None
 ) -> Any:
-    """Run ``argv`` and parse stdout as JSON; a nonzero exit raises RuntimeError."""
+    """Run ``argv`` and parse stdout as JSON; a nonzero exit raises RuntimeError.
+
+    The command gets its own process group so a timeout also stops children that
+    inherited its output pipes; otherwise they would hold the read open.
+    """
     process = await asyncio.create_subprocess_exec(
         *argv,
         stdin=asyncio.subprocess.PIPE if stdin is not None else asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         cwd=cwd,
+        start_new_session=True,
     )
     try:
         stdout, stderr = await asyncio.wait_for(
             process.communicate(stdin.encode() if stdin is not None else None), timeout
         )
     except (TimeoutError, asyncio.CancelledError):
-        if process.returncode is None:
-            process.kill()
-        await process.communicate()
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
+        # A child that left the group can still hold the pipes; do not wait on it.
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(process.communicate(), 2)
         raise
     if process.returncode:
         message = stderr.decode(errors="replace").strip()[-1200:]
