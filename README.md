@@ -93,11 +93,11 @@ Merge queue states map as `QUEUED` and `MERGEABLE` to queued, `AWAITING_CHECKS` 
 
 Use the `command` adapter for GitLab, Buildkite, Jenkins, Bors or an in-house queue. `command` is an argument list run without a shell. Locally it runs in `cwd`, which defaults to the config file's directory; relative paths resolve against that directory too. With `host` set, it runs over SSH (`BatchMode`, every argument quoted for the remote shell), in `cwd` on the host when given.
 
-The program must exit zero and print one snapshot (below) on stdout within `timeout` seconds. Anything else, including a snapshot that breaks the contract, shows as a source error while the last good data stays on screen. [`examples/`](examples/) has a working script and config.
+The program must exit zero and print one snapshot (below) on stdout within `timeout` seconds. Anything else, including a snapshot that breaks the contract, shows as a source error while the last good data stays on screen. [`examples/`](https://github.com/wolfiesch/queue-watch/tree/main/examples) has a working script and config.
 
 ## Snapshot contract
 
-Every adapter emits the same versioned snapshot (`queue-watch.snapshot/1`): a list of records with `id`, `kind`, `state` and `title`, plus optional `ref`, `sha`, `owner`, `position`, timestamps, `url`, `fields` and `children`. `state` is one of `queued`, `running`, `blocked`, `success`, `failure`, `cancelled`, `neutral` or `unknown`; the adapter's own term is kept in `raw_state`. Records that share a `ref` or `sha` describe the same change across sources. [`model.py`](src/queue_watch/model.py) defines and validates the contract, and `--once` prints it.
+Every adapter emits the same versioned snapshot (`queue-watch.snapshot/1`): a list of records with `id`, `kind`, `state` and `title`, plus optional `ref`, `sha`, `owner`, `position`, timestamps, `url`, `fields` and `children`. `state` is one of `queued`, `running`, `blocked`, `success`, `failure`, `cancelled`, `neutral` or `unknown`; the adapter's own term is kept in `raw_state`. Records that share a `ref` or `sha` describe the same change across sources. [`model.py`](https://github.com/wolfiesch/queue-watch/blob/main/src/queue_watch/model.py) defines and validates the contract, and `--once` prints it.
 
 ## Development
 
