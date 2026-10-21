@@ -1,0 +1,558 @@
+{
+  "observed_at": "2026-10-20T23:50:00+00:00",
+  "sources": {
+    "ci": {
+      "adapter": "github-actions",
+      "label": "CI",
+      "snapshot": {
+        "schema": "queue-watch.snapshot/1",
+        "observed_at": "2026-10-20T23:50:00+00:00",
+        "records": [
+          {
+            "id": "9112",
+            "kind": "run",
+            "state": "running",
+            "raw_state": "in_progress",
+            "title": "CI",
+            "subtitle": "Cache parsed headers",
+            "ref": "feat/parser-cache",
+            "sha": "3f9a1c2e7d",
+            "created_at": "2026-10-20T23:46:00+00:00",
+            "updated_at": "2026-10-20T23:49:00+00:00",
+            "url": "https://github.com/acme/widgets/actions/runs/9112",
+            "fields": {
+              "run_id": 9112,
+              "attempt": 1
+            },
+            "children": [
+              {
+                "id": "9112-lint",
+                "kind": "job",
+                "state": "success",
+                "raw_state": "success",
+                "title": "lint",
+                "started_at": "2026-10-20T23:47:00+00:00",
+                "finished_at": "2026-10-20T23:48:00+00:00",
+                "fields": {
+                  "runner": "ubuntu-24.04",
+                  "duration_seconds": 60
+                },
+                "children": [
+                  {
+                    "id": "9112-lint-Run tests",
+                    "kind": "step",
+                    "state": "success",
+                    "title": "Run tests"
+                  }
+                ]
+              },
+              {
+                "id": "9112-test (3.12)",
+                "kind": "job",
+                "state": "running",
+                "raw_state": "in_progress",
+                "title": "test (3.12)",
+                "started_at": "2026-10-20T23:47:00+00:00",
+                "finished_at": null,
+                "fields": {
+                  "runner": "linux-arm64-2",
+                  "duration_seconds": 0
+                },
+                "children": [
+                  {
+                    "id": "9112-test (3.12)-Install",
+                    "kind": "step",
+                    "state": "success",
+                    "title": "Install"
+                  },
+                  {
+                    "id": "9112-test (3.12)-Run tests",
+                    "kind": "step",
+                    "state": "running",
+                    "title": "Run tests"
+                  }
+                ]
+              },
+              {
+                "id": "9112-test (3.13)",
+                "kind": "job",
+                "state": "queued",
+                "raw_state": "queued",
+                "title": "test (3.13)",
+                "started_at": "2026-10-20T23:47:00+00:00",
+                "finished_at": null,
+                "fields": {
+                  "runner": null,
+                  "duration_seconds": 0
+                },
+                "children": []
+              }
+            ]
+          },
+          {
+            "id": "9111",
+            "kind": "run",
+            "state": "failure",
+            "raw_state": "failure",
+            "title": "CI",
+            "subtitle": "Fix font fallback on Windows",
+            "ref": "fix/font-fallback",
+            "sha": "a71c0e9b44",
+            "created_at": "2026-10-20T23:38:00+00:00",
+            "updated_at": "2026-10-20T23:41:00+00:00",
+            "url": "https://github.com/acme/widgets/actions/runs/9111",
+            "fields": {
+              "run_id": 9111,
+              "attempt": 1
+            },
+            "children": [
+              {
+                "id": "9111-lint",
+                "kind": "job",
+                "state": "success",
+                "raw_state": "success",
+                "title": "lint",
+                "started_at": "2026-10-20T23:39:00+00:00",
+                "finished_at": "2026-10-20T23:40:00+00:00",
+                "fields": {
+                  "runner": "ubuntu-24.04",
+                  "duration_seconds": 60
+                },
+                "children": [
+                  {
+                    "id": "9111-lint-Run tests",
+                    "kind": "step",
+                    "state": "success",
+                    "title": "Run tests"
+                  }
+                ]
+              },
+              {
+                "id": "9111-test (3.12)",
+                "kind": "job",
+                "state": "failure",
+                "raw_state": "failure",
+                "title": "test (3.12)",
+                "started_at": "2026-10-20T23:39:00+00:00",
+                "finished_at": "2026-10-20T23:45:00+00:00",
+                "fields": {
+                  "runner": "linux-x64-4",
+                  "duration_seconds": 360
+                },
+                "children": [
+                  {
+                    "id": "9111-test (3.12)-Install",
+                    "kind": "step",
+                    "state": "success",
+                    "title": "Install"
+                  },
+                  {
+                    "id": "9111-test (3.12)-Run tests",
+                    "kind": "step",
+                    "state": "failure",
+                    "title": "Run tests"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "9110",
+            "kind": "run",
+            "state": "queued",
+            "raw_state": "queued",
+            "title": "CI",
+            "subtitle": "Faster diff rendering",
+            "ref": "feat/diff-speed",
+            "sha": "c02d88e1f0",
+            "created_at": "2026-10-20T23:48:00+00:00",
+            "updated_at": "2026-10-20T23:50:00+00:00",
+            "url": "https://github.com/acme/widgets/actions/runs/9110",
+            "fields": {
+              "run_id": 9110,
+              "attempt": 1
+            },
+            "children": []
+          },
+          {
+            "id": "9109",
+            "kind": "run",
+            "state": "blocked",
+            "raw_state": "waiting",
+            "title": "Release",
+            "subtitle": "Bump to 2.4.0",
+            "ref": "main",
+            "sha": "9e4410ab3c",
+            "created_at": "2026-10-20T23:19:00+00:00",
+            "updated_at": "2026-10-20T23:22:00+00:00",
+            "url": "https://github.com/acme/widgets/actions/runs/9109",
+            "fields": {
+              "run_id": 9109,
+              "attempt": 1
+            },
+            "children": [
+              {
+                "id": "9109-publish",
+                "kind": "job",
+                "state": "blocked",
+                "raw_state": "blocked",
+                "title": "publish",
+                "started_at": "2026-10-20T23:20:00+00:00",
+                "finished_at": "2026-10-20T23:20:00+00:00",
+                "fields": {
+                  "runner": null,
+                  "duration_seconds": 0
+                },
+                "children": []
+              }
+            ]
+          },
+          {
+            "id": "9108",
+            "kind": "run",
+            "state": "success",
+            "raw_state": "success",
+            "title": "CI",
+            "subtitle": "Stream large uploads",
+            "ref": "feat/stream-upload",
+            "sha": "5bd201f7aa",
+            "created_at": "2026-10-20T23:32:00+00:00",
+            "updated_at": "2026-10-20T23:35:00+00:00",
+            "url": "https://github.com/acme/widgets/actions/runs/9108",
+            "fields": {
+              "run_id": 9108,
+              "attempt": 1
+            },
+            "children": [
+              {
+                "id": "9108-lint",
+                "kind": "job",
+                "state": "success",
+                "raw_state": "success",
+                "title": "lint",
+                "started_at": "2026-10-20T23:33:00+00:00",
+                "finished_at": "2026-10-20T23:34:00+00:00",
+                "fields": {
+                  "runner": "ubuntu-24.04",
+                  "duration_seconds": 60
+                },
+                "children": [
+                  {
+                    "id": "9108-lint-Run tests",
+                    "kind": "step",
+                    "state": "success",
+                    "title": "Run tests"
+                  }
+                ]
+              },
+              {
+                "id": "9108-test (3.12)",
+                "kind": "job",
+                "state": "success",
+                "raw_state": "success",
+                "title": "test (3.12)",
+                "started_at": "2026-10-20T23:33:00+00:00",
+                "finished_at": "2026-10-20T23:40:00+00:00",
+                "fields": {
+                  "runner": "ubuntu-24.04",
+                  "duration_seconds": 420
+                },
+                "children": [
+                  {
+                    "id": "9108-test (3.12)-Run tests",
+                    "kind": "step",
+                    "state": "success",
+                    "title": "Run tests"
+                  }
+                ]
+              },
+              {
+                "id": "9108-test (3.13)",
+                "kind": "job",
+                "state": "success",
+                "raw_state": "success",
+                "title": "test (3.13)",
+                "started_at": "2026-10-20T23:33:00+00:00",
+                "finished_at": "2026-10-20T23:41:00+00:00",
+                "fields": {
+                  "runner": "ubuntu-24.04",
+                  "duration_seconds": 480
+                },
+                "children": [
+                  {
+                    "id": "9108-test (3.13)-Run tests",
+                    "kind": "step",
+                    "state": "success",
+                    "title": "Run tests"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "9107",
+            "kind": "run",
+            "state": "success",
+            "raw_state": "success",
+            "title": "Docs",
+            "subtitle": "Document merge queue",
+            "ref": "docs/merge-queue",
+            "sha": "d1e2f3a4b5",
+            "created_at": "2026-10-20T23:25:00+00:00",
+            "updated_at": "2026-10-20T23:28:00+00:00",
+            "url": "https://github.com/acme/widgets/actions/runs/9107",
+            "fields": {
+              "run_id": 9107,
+              "attempt": 1
+            },
+            "children": [
+              {
+                "id": "9107-build",
+                "kind": "job",
+                "state": "success",
+                "raw_state": "success",
+                "title": "build",
+                "started_at": "2026-10-20T23:26:00+00:00",
+                "finished_at": "2026-10-20T23:28:00+00:00",
+                "fields": {
+                  "runner": "ubuntu-24.04",
+                  "duration_seconds": 120
+                },
+                "children": [
+                  {
+                    "id": "9107-build-Run tests",
+                    "kind": "step",
+                    "state": "success",
+                    "title": "Run tests"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "9106",
+            "kind": "run",
+            "state": "cancelled",
+            "raw_state": "cancelled",
+            "title": "CI",
+            "subtitle": "Retry flaky socket test",
+            "ref": "fix/socket-retry",
+            "sha": "77aa12cd90",
+            "created_at": "2026-10-20T23:10:00+00:00",
+            "updated_at": "2026-10-20T23:13:00+00:00",
+            "url": "https://github.com/acme/widgets/actions/runs/9106",
+            "fields": {
+              "run_id": 9106,
+              "attempt": 1
+            },
+            "children": []
+          },
+          {
+            "id": "9105",
+            "kind": "run",
+            "state": "failure",
+            "raw_state": "failure",
+            "title": "CI",
+            "subtitle": "Cache parsed headers",
+            "ref": "feat/parser-cache",
+            "sha": "1e0f9d8c7b",
+            "created_at": "2026-10-20T22:55:00+00:00",
+            "updated_at": "2026-10-20T22:58:00+00:00",
+            "url": "https://github.com/acme/widgets/actions/runs/9105",
+            "fields": {
+              "run_id": 9105,
+              "attempt": 1
+            },
+            "children": [
+              {
+                "id": "9105-test (3.12)",
+                "kind": "job",
+                "state": "failure",
+                "raw_state": "failure",
+                "title": "test (3.12)",
+                "started_at": "2026-10-20T22:56:00+00:00",
+                "finished_at": "2026-10-20T23:05:00+00:00",
+                "fields": {
+                  "runner": "linux-x64-1",
+                  "duration_seconds": 540
+                },
+                "children": [
+                  {
+                    "id": "9105-test (3.12)-Run tests",
+                    "kind": "step",
+                    "state": "failure",
+                    "title": "Run tests"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "warnings": []
+      }
+    },
+    "merge-queue": {
+      "adapter": "github-merge-queue",
+      "label": "Merge queue",
+      "snapshot": {
+        "schema": "queue-watch.snapshot/1",
+        "observed_at": "2026-10-20T23:50:00+00:00",
+        "records": [
+          {
+            "id": "mq-1",
+            "kind": "queue_entry",
+            "state": "running",
+            "raw_state": "merging",
+            "title": "#482 Stream large uploads",
+            "ref": "feat/stream-upload",
+            "sha": "5bd201f7aa",
+            "owner": "dana",
+            "position": 1,
+            "created_at": "2026-10-20T23:41:00+00:00",
+            "url": "https://github.com/acme/widgets/pull/482",
+            "fields": {
+              "pull_request": 482,
+              "estimated_seconds": 120
+            }
+          },
+          {
+            "id": "mq-2",
+            "kind": "queue_entry",
+            "state": "queued",
+            "raw_state": "awaiting_checks",
+            "title": "#479 Cache parsed headers",
+            "ref": "feat/parser-cache",
+            "sha": "3f9a1c2e7d",
+            "owner": "lee",
+            "position": 2,
+            "created_at": "2026-10-20T23:44:00+00:00",
+            "url": "https://github.com/acme/widgets/pull/479",
+            "fields": {
+              "pull_request": 479,
+              "estimated_seconds": 420
+            }
+          },
+          {
+            "id": "mq-3",
+            "kind": "queue_entry",
+            "state": "queued",
+            "raw_state": "queued",
+            "title": "#485 Document merge queue",
+            "ref": "docs/merge-queue",
+            "sha": "d1e2f3a4b5",
+            "owner": "sam",
+            "position": 3,
+            "created_at": "2026-10-20T23:47:00+00:00",
+            "url": "https://github.com/acme/widgets/pull/485",
+            "fields": {
+              "pull_request": 485,
+              "estimated_seconds": 610
+            }
+          },
+          {
+            "id": "mq-4",
+            "kind": "queue_entry",
+            "state": "blocked",
+            "raw_state": "unmergeable",
+            "title": "#476 Fix font fallback on Windows",
+            "ref": "fix/font-fallback",
+            "sha": "a71c0e9b44",
+            "owner": "ari",
+            "position": 4,
+            "created_at": "2026-10-20T23:36:00+00:00",
+            "url": "https://github.com/acme/widgets/pull/476",
+            "fields": {
+              "pull_request": 476
+            }
+          },
+          {
+            "id": "at-0",
+            "kind": "attempt",
+            "state": "success",
+            "raw_state": "merged",
+            "title": "#471 Faster startup",
+            "ref": "feat/startup",
+            "started_at": "2026-10-20T23:25:00+00:00",
+            "finished_at": "2026-10-20T23:28:00+00:00",
+            "fields": {
+              "lock_wait_seconds": 12.4,
+              "lock_hold_seconds": 38.0
+            }
+          },
+          {
+            "id": "at-1",
+            "kind": "attempt",
+            "state": "failure",
+            "raw_state": "refused",
+            "title": "#468 Bump lockfile",
+            "ref": "chore/lockfile",
+            "started_at": "2026-10-20T23:12:00+00:00",
+            "finished_at": "2026-10-20T23:15:00+00:00",
+            "fields": {
+              "lock_wait_seconds": 3.1,
+              "lock_hold_seconds": 9.8
+            }
+          },
+          {
+            "id": "at-2",
+            "kind": "attempt",
+            "state": "success",
+            "raw_state": "merged",
+            "title": "#466 Tidy errors",
+            "ref": "fix/errors",
+            "started_at": "2026-10-20T22:59:00+00:00",
+            "finished_at": "2026-10-20T23:02:00+00:00",
+            "fields": {
+              "lock_wait_seconds": 40.2,
+              "lock_hold_seconds": 51.3
+            }
+          },
+          {
+            "id": "at-3",
+            "kind": "attempt",
+            "state": "success",
+            "raw_state": "merged",
+            "title": "#463 Theme tokens",
+            "ref": "feat/theme",
+            "started_at": "2026-10-20T22:46:00+00:00",
+            "finished_at": "2026-10-20T22:49:00+00:00",
+            "fields": {
+              "lock_wait_seconds": 8.0,
+              "lock_hold_seconds": 44.9
+            }
+          },
+          {
+            "id": "at-4",
+            "kind": "attempt",
+            "state": "failure",
+            "raw_state": "failed",
+            "title": "#460 New exporter",
+            "ref": "feat/exporter",
+            "started_at": "2026-10-20T22:27:00+00:00",
+            "finished_at": "2026-10-20T22:30:00+00:00",
+            "fields": {
+              "lock_wait_seconds": 22.5,
+              "lock_hold_seconds": 120.4
+            }
+          },
+          {
+            "id": "at-5",
+            "kind": "attempt",
+            "state": "success",
+            "raw_state": "merged",
+            "title": "#459 CLI help",
+            "ref": "docs/cli",
+            "started_at": "2026-10-20T22:12:00+00:00",
+            "finished_at": "2026-10-20T22:15:00+00:00",
+            "fields": {
+              "lock_wait_seconds": 5.2,
+              "lock_hold_seconds": 30.1
+            }
+          }
+        ],
+        "warnings": [],
+        "note": "Positions and estimates come from GitHub."
+      }
+    }
+  }
+}
