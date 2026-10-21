@@ -1,0 +1,39 @@
+name: Bug report
+description: Something shows the wrong thing, crashes or fails to load
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead. A screenshot helps for layout problems.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: The command you ran and the sources involved. `queue-watch --demo` reproduces many display problems without your data.
+      placeholder: queue-watch --repo owner/repo
+    validations:
+      required: true
+  - type: textarea
+    id: snapshot
+    attributes:
+      label: Snapshot (optional)
+      description: Output of the same command with `--once`, trimmed to the records involved. Remove anything private.
+      render: json
+  - type: input
+    id: version
+    attributes:
+      label: queue-watch version
+      placeholder: queue-watch --version
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS, terminal and Python version
+      placeholder: macOS 15, Ghostty, Python 3.13
+    validations:
+      required: true
