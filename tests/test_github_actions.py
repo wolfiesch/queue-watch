@@ -1,4 +1,4 @@
-"""GitHub Actions paging, precedence and state normalization; subprocess limits."""
+"""GitHub Actions paging, precedence, revalidation and state normalization; subprocess limits."""
 
 from __future__ import annotations
 
@@ -15,9 +15,26 @@ from queue_watch.adapters.github_actions import GitHubActions
 from queue_watch.model import validate_snapshot
 
 
+def http(body, *, etag=None, link=None) -> tuple[int, bytes, bytes]:
+    """What ``gh api --include`` prints for a 200."""
+    head = ["HTTP/2.0 200 OK"] + [f"Etag: {etag}"] * bool(etag) + [f"Link: {link}"] * bool(link)
+    return 0, ("\r\n".join(head) + "\r\n\r\n" + json.dumps(body)).encode(), b""
+
+
+def not_modified(etag) -> tuple[int, bytes, bytes]:
+    """``gh api --include`` on a 304: headers only, and a nonzero exit."""
+    return 1, f"HTTP/2.0 304 Not Modified\r\nEtag: {etag}\r\n\r\n".encode(), b"gh: HTTP 304\n"
+
+
+def endpoint_of(argv) -> str:
+    return next(arg for arg in argv if arg.startswith("repos/"))
+
+
 def test_old_active_runs_survive_recent_page_and_newer_state_wins(monkeypatch):
     async def response(argv):
-        endpoint = argv[-1]
+        return http(body(endpoint_of(argv)))
+
+    def body(endpoint):
         if "status=queued" in endpoint:
             return {
                 "total_count": 101,
@@ -52,7 +69,7 @@ def test_old_active_runs_survive_recent_page_and_newer_state_wins(monkeypatch):
             ],
         }
 
-    monkeypatch.setattr(github_actions.process, "run_json", response)
+    monkeypatch.setattr(github_actions.process, "capture", response)
     snapshot = validate_snapshot(asyncio.run(GitHubActions(repo="owner/repo").snapshot()))
     assert [(r["id"], r["state"], r["raw_state"]) for r in snapshot["records"]] == [
         ("5", "blocked", "waiting"),
@@ -62,9 +79,15 @@ def test_old_active_runs_survive_recent_page_and_newer_state_wins(monkeypatch):
     assert snapshot["warnings"] == ["queued: showing first 100 of 101 runs"]
 
 
-def test_jobs_become_child_records_with_steps(monkeypatch):
+def test_jobs_become_child_records_with_steps_across_pages(monkeypatch):
+    async def first_page(argv):
+        if 'If-None-Match: W/"j"' in argv:
+            return not_modified('W/"j"')
+        return http(
+            {"jobs": []}, etag='W/"j"', link='<https://api.github.com/x?page=2>; rel="next"'
+        )
+
     async def response(argv):
-        assert "--paginate" in argv
         return [
             {
                 "jobs": [
@@ -88,13 +111,59 @@ def test_jobs_become_child_records_with_steps(monkeypatch):
             {"jobs": [{"id": 8, "name": "lint", "status": "completed", "conclusion": "skipped"}]},
         ]
 
+    monkeypatch.setattr(github_actions.process, "capture", first_page)
     monkeypatch.setattr(github_actions.process, "run_json", response)
-    jobs = asyncio.run(GitHubActions(repo="owner/repo").children({"id": "3"}))
-    assert [(j["title"], j["state"], j["fields"]["runner"]) for j in jobs] == [
-        ("test", "running", "linux-1"),
-        ("lint", "neutral", None),
-    ]
+    adapter = GitHubActions(repo="owner/repo")
+    for _ in range(2):  # the second first-page request answers 304
+        jobs = asyncio.run(adapter.children({"id": "3"}))
+        # A 304 says nothing about later pages, so every page is still fetched.
+        assert [(j["title"], j["state"], j["fields"]["runner"]) for j in jobs] == [
+            ("test", "running", "linux-1"),
+            ("lint", "neutral", None),
+        ]
     assert [(s["title"], s["state"]) for s in jobs[0]["children"]] == [("Run", "failure")]
+
+
+def test_unchanged_lists_are_revalidated_and_reuse_the_cached_body(monkeypatch):
+    etags = {}
+    queued = [{"id": 1, "status": "queued", "updated_at": "2026-10-20T03:00:00Z"}]
+    sent = []
+
+    async def response(argv):
+        endpoint = endpoint_of(argv)
+        header = next((arg for arg in argv if arg.startswith("If-None-Match: ")), None)
+        sent.append(header)
+        etag = etags.setdefault(endpoint, 'W/"1"')
+        if header == f"If-None-Match: {etag}":
+            return not_modified(etag)
+        runs = queued if endpoint.endswith("status=queued") else []
+        # The unfiltered list always has older pages; only its first page is read.
+        link = None if "status=" in endpoint else '<https://api.github.com/x?page=2>; rel="next"'
+        return http({"total_count": len(runs), "workflow_runs": runs}, etag=etag, link=link)
+
+    monkeypatch.setattr(github_actions.process, "capture", response)
+    adapter = GitHubActions(repo="owner/repo")
+
+    def ids():
+        return [r["id"] for r in asyncio.run(adapter.snapshot())["records"]]
+
+    assert ids() == ["1"]
+    assert sent == [None] * 6
+    sent.clear()
+    assert ids() == ["1"]  # every list answered 304
+    assert all(header and header.startswith("If-None-Match: ") for header in sent)
+    etags["repos/owner/repo/actions/runs?per_page=100&status=queued"] = 'W/"2"'
+    queued.append({"id": 2, "status": "queued", "updated_at": "2026-10-20T03:01:00Z"})
+    assert ids() == ["2", "1"]  # the changed list replaces its cached body
+
+
+def test_failed_request_raises_gh_message(monkeypatch):
+    async def response(argv):
+        return 1, b"HTTP/2.0 404 Not Found\r\n\r\n{}", b"gh: Not Found (HTTP 404)\n"
+
+    monkeypatch.setattr(github_actions.process, "capture", response)
+    with pytest.raises(RuntimeError, match="Not Found"):
+        asyncio.run(GitHubActions(repo="owner/repo").snapshot())
 
 
 def test_repo_must_be_owner_slash_name():

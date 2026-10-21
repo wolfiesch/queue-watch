@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The `github-actions` adapter sends each list's last ETag back with `If-None-Match`. GitHub does not count a `304 Not Modified` against the API rate limit, so run lists and job lists that have not changed since the last refresh no longer use up the account's hourly budget. Against a busy repository, 5 of the 6 run-list requests per refresh came back unchanged.
+
 ## 0.3.0 - 2026-10-21
 
 - Profiles for groups of repositories: `queue-watch profile add NAME --repo owner/repo [--repo ...]` creates or extends `~/.config/queue-watch/NAME.toml`, and `queue-watch profile list` shows every profile and its sources.
