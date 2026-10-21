@@ -81,7 +81,9 @@ def test_old_active_runs_survive_recent_page_and_newer_state_wins(monkeypatch):
 
 def test_jobs_become_child_records_with_steps_across_pages(monkeypatch):
     async def first_page(argv):
-        return http({"jobs": []}, etag='W/"j"', link='<https://api.github.com/x?page=2>; rel="next"')
+        return http(
+            {"jobs": []}, etag='W/"j"', link='<https://api.github.com/x?page=2>; rel="next"'
+        )
 
     async def response(argv):
         return [
