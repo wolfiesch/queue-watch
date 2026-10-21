@@ -1,6 +1,6 @@
 # queue-watch
 
-Read-only terminal dashboard for CI runs and merge queues. Click tabs, rows and buttons, scroll with the wheel, and inspect jobs without leaving the terminal. queue-watch never reruns, cancels, merges or takes a lock.
+Read-only terminal dashboard for CI runs and merge queues. It joins records from every source into one row per change, so a branch's CI runs and its merge-queue entry read together, and draws each merge queue as a chain of chips in queue order. queue-watch never reruns, cancels, merges or takes a lock.
 
 ## Install
 
@@ -18,11 +18,14 @@ queue-watch --repo owner/repo            # Actions plus the merge queue, if any
 queue-watch --profile work               # ~/.config/queue-watch/work.toml
 queue-watch --config sources.toml        # any combination of sources
 queue-watch --repo owner/repo --once     # one JSON snapshot, no TUI
+queue-watch --theme nord --ascii         # any Textual theme; ASCII glyphs only
 ```
 
 With no flags, queue-watch looks for a `.queue-watch.toml` at the root of the current Git checkout. Without one, it watches the checkout's GitHub repository: Actions runs, plus the merge queue when the default branch has one. `--profile NAME` reads `$XDG_CONFIG_HOME/queue-watch/NAME.toml` (default `~/.config`).
 
-Keyboard: tab and arrows to move, `/` to search, `r` to refresh, `p` to pause, `o` to open the selected record, `q` to quit. When a source fails, its last good data stays on screen and is labelled stale.
+The Changes tab groups changes into Needs attention, Running, Queued and Done; every view a source reports also gets its own tab. Select a change or a queue chip to see its CI checks, the jobs of the most notable one, its queue position and ETA, and recent history in the inspector.
+
+Keyboard: arrows to move, `1` to `9` for tabs, `/` to search (esc to clear), `o` to open the selection in a browser, `c` to copy its SHA, `r` to refresh, `p` to pause, `q` to quit. The mouse works too: click tabs, rows, chips and the inspector buttons, and scroll with the wheel. When a source fails, its last good data stays on screen and its status pill turns stale.
 
 ### Repository configs need trust
 

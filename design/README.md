@@ -26,4 +26,4 @@ Dense keeps the most changes on screen, which matters most when a queue backs up
 
 Not adopted from calm: one card per change and the bordered inspector drawer.
 
-The real app (`src/queue_watch/app.py`) does not yet follow this direction; adopting it is the next stage.
+The app (`src/queue_watch/app.py`) follows this direction: dense rows and inspector, calm queue chips.
