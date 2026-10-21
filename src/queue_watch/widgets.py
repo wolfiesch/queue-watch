@@ -174,12 +174,17 @@ def short_age(seconds: float | None) -> str:
     return f"{seconds}s"
 
 
+def now() -> float:
+    """Wall-clock epoch seconds; the one place ages read the clock (tests replace it)."""
+    return time.time()
+
+
 def ago(value: str | float | None) -> float | None:
     """Seconds since an ISO timestamp or epoch seconds."""
     if isinstance(value, (int, float)):
-        return time.time() - value if value else None
+        return now() - value if value else None
     try:
-        return time.time() - datetime.fromisoformat(value).timestamp()
+        return now() - datetime.fromisoformat(value).timestamp()
     except (TypeError, ValueError):
         return None
 
@@ -200,7 +205,7 @@ def elapsed(record: dict) -> float | None:
     if not start:
         return None
     if record["state"] == "running":
-        return time.time() - start
+        return now() - start
     end = stamp(record, "finished_at")
     return end - start if end >= start else None
 
