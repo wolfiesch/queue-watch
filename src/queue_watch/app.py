@@ -106,6 +106,9 @@ Sparkline > .sparkline--min-color { color: $success; }
 .chip.holder { border: heavy $primary; background: $primary 14%; border-title-color: $primary; }
 .-ascii .chip { border: ascii $foreground 40%; }
 .-ascii .chip.holder { border: ascii $primary; }
+.-short .chip, .-short .chip:hover, .-short .chip.holder { height: 1; border: none; }
+.-short .chip:hover { background: $primary 30%; }
+.-short .chain .link, .-short .chain .more { height: 1; }
 
 #search { display: none; height: 1; border: none; padding: 0 1; margin: 0 1; background: $panel; }
 #body { height: 1fr; }
@@ -301,6 +304,11 @@ class QueueWatch(App):
 
     def on_resize(self, event: Resize) -> None:
         self.set_class(event.size.width < 120, "-narrow")
+        short = event.size.height < 30
+        if short != self.has_class("-short"):
+            self.set_class(short, "-short")
+            for chip in self.query(widgets.QueueChip):
+                chip.refresh(layout=True)
 
     # --- polling ----------------------------------------------------------- #
 
@@ -358,7 +366,8 @@ class QueueWatch(App):
             table = DataTable(id=name, cursor_type="row")
             for column in view["columns"]:
                 table.add_column(column.get("label", column["key"]), width=column.get("width"))
-            pane = TabPane(self.pane_label(source_id, view, 0), table, id=f"{name}-tab")
+            first = all(sid != source_id for sid, _ in self.panes.values())
+            pane = TabPane(self.pane_label(source_id, view, 0, first), table, id=f"{name}-tab")
             await tabs.add_pane(pane, before=later[0] if later else None)
             # Register only once mounted: other fetches rebuild tables concurrently.
             self.records[name] = {}
@@ -380,9 +389,10 @@ class QueueWatch(App):
         await self.query_one("#queues", Vertical).mount(strip, before=later[0] if later else None)
         self.strips[source_id] = strip
 
-    def pane_label(self, source_id: str, view: dict, count: int) -> Content:
+    def pane_label(self, source_id: str, view: dict, count: int, first: bool) -> Content:
+        """``Source · View 4`` on a source's first tab, ``View 4`` on the rest."""
         label = view.get("label") or view["kind"]
-        if len(self.sources) > 1:
+        if len(self.sources) > 1 and first:
             label = f"{self.sources[source_id].label} {widgets.SYMBOLS.dot} {label}"
         return Content(f"{clean(label)} {count}")
 
@@ -465,7 +475,9 @@ class QueueWatch(App):
                 if r["kind"] == view["kind"] and self.matches(r)
             ]
             self.records[name] = {r["id"]: r for r in rows}
-            tabs.get_tab(f"{name}-tab").label = self.pane_label(source_id, view, len(rows))
+            first = next(pane for pane, (sid, _) in self.panes.items() if sid == source_id)
+            label = self.pane_label(source_id, view, len(rows), first == name)
+            tabs.get_tab(f"{name}-tab").label = label
             table = self.query_one(f"#{name}", DataTable)
             old_key = None
             if table.row_count:
@@ -548,9 +560,9 @@ class QueueWatch(App):
             change = self.changes.get(self.selected or "")
             target = ("change", self.selected)
             if change is None:
-                await inspector.show(
-                    dim("No change selected."), [], url=False, sha=False, reset=True
-                )
+                # Nothing is selected only when the table has no rows: say why, as it does.
+                reason = self.query_one(ChangeTable).empty
+                await inspector.show(dim(reason), [], url=False, sha=False, reset=True)
                 self.shown = target
                 return
             head, sections, lazy = self.change_view(change)
@@ -769,7 +781,7 @@ class QueueWatch(App):
         }:
             self.selected = change.key
             tabs.active = CHANGES
-            self.query_one(ChangeTable).highlight(change.key)
+            self.query_one(ChangeTable).highlight(change.key, reveal=True)
             self.query_one("#rows").focus()
             await self.show_selection()
             return
