@@ -132,6 +132,7 @@ Screen { background: $surface; }
 .queue-head .took-stats { width: auto; }
 .queue-head .depth, .queue-head .took { display: none; }
 .queue.-depth .queue-head .depth, .queue.-took .queue-head .took { display: block; }
+.queue.-took.-took-flat .queue-head .took.spark { display: none; }
 .-narrow .queue .queue-head .spark, .-narrow .queue .queue-head .depth { display: none; }
 Sparkline > .sparkline--max-color { color: $error; }
 Sparkline > .sparkline--min-color { color: $success; }

@@ -19,7 +19,6 @@ from .model import SCHEMA
 SPEED = 15  # simulated seconds per wall-clock second
 STEP = 30  # simulated seconds per tick
 WARMUP = 40  # ticks simulated before the first frame, so history exists
-NOTE = "Demo data: a simulated repository. Nothing here is real."
 
 
 @dataclass(frozen=True)
@@ -322,7 +321,7 @@ class Simulation:
             "schema": SCHEMA,
             "observed_at": iso(now),
             "records": records + self.attempts[::-1],
-            "note": NOTE,
+            "note": f"Demo data: {self.repo.name} is a simulated repository. Nothing here is real.",
         }
 
 

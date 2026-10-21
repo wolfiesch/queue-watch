@@ -12,6 +12,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
+from itertools import pairwise
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -391,6 +392,7 @@ class QueueChip(Static):
 
 DEPTH_SAMPLES = 120  # one per fetch: half an hour at the default 15 s interval
 SPARK_CELLS = 20
+SPARK_MIN = 4  # narrower than this a sparkline shows no trend: drop it instead
 
 
 class QueueStrip(Vertical):
@@ -408,6 +410,8 @@ class QueueStrip(Vertical):
         self.built: tuple | None = None
         # Queue length after each fetch this session; sources keep no history of it.
         self.depth: deque[int] = deque(maxlen=DEPTH_SAMPLES)
+        # Cell widths of the head row's text, for fit(): title, eta, rate, stats.
+        self.text_cells = (0, 0, 0, 0)
 
     def compose(self) -> ComposeResult:
         with Horizontal(classes="queue-head"):
@@ -447,40 +451,87 @@ class QueueStrip(Vertical):
             if self.merges:
                 last = short_age(now() - max(self.merges))
                 status += f" {SYMBOLS.dot} last merge {last} ago"
-        self.query_one(".queue-title", Static).update(Content.assemble((status, "b")))
+        title = Content.assemble((status, "b"))
+        self.query_one(".queue-title", Static).update(title)
         clears = max((eta_of(e) or 0 for e in self.entries), default=0)
-        self.query_one(".queue-eta", Static).update(
-            Content.assemble(muted("clears in "), (eta_text(clears), "b")) if clears else ""
+        eta = (
+            Content.assemble(muted("clears in "), (eta_text(clears), "b")) if clears else Content()
         )
-        # Visibility is by class so that the narrow layout's CSS can still hide sparklines.
-        self.set_class(len(self.depth) > 1, "-depth")
+        self.query_one(".queue-eta", Static).update(eta)
         if len(self.depth) > 1:
-            depth = self.query_one(".depth.spark", Sparkline)
-            depth.data = list(self.depth)
-            depth.styles.width = min(len(self.depth), SPARK_CELLS)
+            self.query_one(".depth.spark", Sparkline).data = list(self.depth)
         merged = sum(now() - finished <= 3600 for finished in self.merges)
-        self.query_one(".rate", Static).update(
+        rate = (
             Content.assemble(glyph("success"), muted(f" {merged} merged/hr"))
             if self.history
-            else ""
+            else Content()
         )
+        self.query_one(".rate", Static).update(rate)
         took = [elapsed(a) for a in self.attempts[-30:]]
         failed = sum(a["state"] == "failure" for a in self.attempts[-30:])
-        self.set_class(len(took) > 1, "-took")
+        stats = Content()
         if len(took) > 1:
-            trend = self.query_one(".took.spark", Sparkline)
-            trend.data = took
-            trend.styles.width = min(len(took), SPARK_CELLS)
-            self.query_one(".took-stats", Static).update(
-                Content.assemble(
-                    muted(
-                        f" median {human_seconds(statistics.median(took))} {SYMBOLS.dot} "
-                        f"max {human_seconds(max(took))} {SYMBOLS.dot} "
-                    ),
-                    glyph("failure"),
-                    muted(f" {failed}/{len(took)}"),
-                )
+            self.query_one(".took.spark", Sparkline).data = took
+            stats = Content.assemble(
+                muted(
+                    f" median {human_seconds(statistics.median(took))} {SYMBOLS.dot} "
+                    f"max {human_seconds(max(took))} {SYMBOLS.dot} "
+                ),
+                glyph("failure"),
+                muted(f" {failed}/{len(took)}"),
             )
+            self.query_one(".took-stats", Static).update(stats)
+        self.text_cells = tuple(c.cell_length for c in (title, eta, rate, stats))
+        self.fit()
+
+    def head_width(self, depth: int | None, took: int | None, stats: bool) -> int:
+        """Cells the head row needs with sparklines of these widths (None: hidden).
+
+        Mirrors the ``.queue-head`` rules in the app CSS: widths, margins (adjacent
+        margins collapse to the larger) and the ETA's ``min-width``."""
+        title, eta, rate, stats_cells = self.text_cells
+        boxes = [(title, 0, 0), (max(18, eta + 2), 0, 0)]  # (width, margin-left, margin-right)
+        if depth is not None:
+            boxes += [(5, 2, 0), (depth, 1, 1)]  # "depth" label, sparkline
+        boxes.append((rate, 2, 0))
+        if stats:
+            boxes.append((4, 2, 0))  # "took" label
+            if took is not None:
+                boxes.append((took, 1, 1))
+            boxes.append((stats_cells, 0, 0))
+        gaps = sum(max(left[2], right[1]) for left, right in pairwise(boxes))
+        return sum(box[0] for box in boxes) + boxes[0][1] + boxes[-1][2] + gaps
+
+    def fit(self) -> None:
+        """Size the sparklines to the room the head row's text leaves, so the counts
+        never clip: shrink both, then drop the depth trend, then the took trend."""
+        room = self.query_one(".queue-head").size.width or self.app.size.width - 4
+        stats = len(self.attempts[-30:]) > 1
+        want_depth = min(len(self.depth), SPARK_CELLS) if len(self.depth) > 1 else None
+        want_took = min(len(self.attempts), SPARK_CELLS) if stats else None
+        for depth, took in ((want_depth, want_took), (None, want_took), (None, None)):
+            spare = room - self.head_width(
+                None if depth is None else 0, None if took is None else 0, stats
+            )
+            if depth is not None and took is not None:
+                depth = min(depth, max(spare // 2, spare - took))
+                took = min(took, spare - depth)
+            elif depth is not None:
+                depth = min(depth, spare)
+            elif took is not None:
+                took = min(took, spare)
+            # A short history keeps its full length; only a shrunk trend has a floor.
+            fits = ((depth, want_depth), (took, want_took))
+            if all(cells is None or cells >= min(want, SPARK_MIN) for cells, want in fits):
+                break
+        # Visibility is by class so that the narrow layout's CSS can still hide sparklines.
+        self.set_class(depth is not None, "-depth")
+        if depth is not None:
+            self.query_one(".depth.spark").styles.width = depth
+        self.set_class(stats, "-took")
+        self.set_class(stats and took is None, "-took-flat")
+        if took is not None:
+            self.query_one(".took.spark").styles.width = took
 
     async def chain(self) -> None:
         chain = self.query_one(".chain", Horizontal)
@@ -513,6 +564,7 @@ class QueueStrip(Vertical):
         chain.display = bool(widgets)
 
     async def on_resize(self) -> None:
+        self.fit()
         if self.built is not None and self.built[0] != self.query_one(".chain").size.width:
             await self.chain()
 
