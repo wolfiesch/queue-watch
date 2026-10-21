@@ -147,8 +147,11 @@ def test_empty_states_say_why_nothing_is_shown() -> None:
         async with app.run_test(size=(160, 45)) as pilot:
             await answered(pilot)
             if "mq" in app.strips:
-                title = str(app.strips["mq"].query_one(".queue-title").render())
+                strip = app.strips["mq"]
+                title = str(strip.query_one(".queue-title").render())
                 assert title == "MQ  nothing waiting · last merge 12m ago"
+                # The attempt has no start time or duration but still counts as a merge.
+                assert str(strip.query_one(".rate").render()) == "✓ 1 merged/hr"
                 # With no changes the app opens the first source tab: the empty queue.
                 assert app.query_one("#tabs", TabbedContent).active != "changes-tab"
                 head = str(app.query_one("#insp-head").render())

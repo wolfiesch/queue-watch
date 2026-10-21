@@ -387,8 +387,9 @@ class QueueStrip(Vertical):
         super().__init__(classes="queue")
         self.source, self.label = source, label
         self.entries: list[dict] = []
-        self.attempts: list[dict] = []
-        self.last_merge = 0.0
+        self.attempts: list[dict] = []  # with a duration: the "took" trend
+        self.merges: list[float] = []  # finish times of every successful attempt
+        self.history = False
         self.by_record: dict[str, Change] = {}
         self.built: tuple | None = None
         # Queue length after each fetch this session; sources keep no history of it.
@@ -416,14 +417,10 @@ class QueueStrip(Vertical):
             (r for r in records if r["kind"] == "attempt" and elapsed(r) is not None),
             key=lambda r: stamp(r, "finished_at", "started_at"),
         )
-        self.last_merge = max(
-            (
-                stamp(r, "finished_at")
-                for r in records
-                if r["kind"] == "attempt" and r["state"] == "success"
-            ),
-            default=0.0,
-        )
+        # Merge counts need only a finish time; a log may omit start times and durations.
+        finished = [r for r in records if r["kind"] == "attempt" and stamp(r, "finished_at")]
+        self.history = bool(finished)
+        self.merges = [stamp(r, "finished_at") for r in finished if r["state"] == "success"]
         self.by_record = by_record
         self.head()
         await self.chain()
@@ -433,8 +430,9 @@ class QueueStrip(Vertical):
         status = f"  {waiting} waiting"
         if not waiting:
             status = "  nothing waiting"
-            if self.last_merge:
-                status += f" {SYMBOLS.dot} last merge {short_age(now() - self.last_merge)} ago"
+            if self.merges:
+                last = short_age(now() - max(self.merges))
+                status += f" {SYMBOLS.dot} last merge {last} ago"
         self.query_one(".queue-title", Static).update(
             Content.assemble((clean(self.label).upper(), "b"), muted(status))
         )
@@ -448,13 +446,10 @@ class QueueStrip(Vertical):
             depth = self.query_one(".depth.spark", Sparkline)
             depth.data = list(self.depth)
             depth.styles.width = min(len(self.depth), SPARK_CELLS)
-        merged = sum(
-            a["state"] == "success" and now() - stamp(a, "finished_at") <= 3600
-            for a in self.attempts
-        )
+        merged = sum(now() - finished <= 3600 for finished in self.merges)
         self.query_one(".rate", Static).update(
             Content.assemble(glyph("success"), muted(f" {merged} merged/hr"))
-            if self.attempts
+            if self.history
             else ""
         )
         took = [elapsed(a) for a in self.attempts[-30:]]
