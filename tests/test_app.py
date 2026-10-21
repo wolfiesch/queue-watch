@@ -207,9 +207,16 @@ def test_done_group_starts_folded_and_enter_toggles_it() -> None:
             await pilot.press("r")
             await loaded(pilot)
             assert "c:old" in ids(rows)
-            rows.highlighted = ids(rows).index("g:done")
-            await pilot.press("enter")
+            # Fold Done while one of its changes is selected: refreshes keep the cursor on
+            # the group row, so enter still unfolds it.
+            rows.highlighted = ids(rows).index("c:old")
+            await pilot.pause()
+            assert app.selected == "old"
+            await pilot.press("up", "enter")
             assert "c:old" not in ids(rows)
+            await pilot.press("r")
+            await loaded(pilot)
+            assert rows.get_option_at_index(rows.highlighted).id == "g:done"
             # Selecting a change from elsewhere (a queue chip) unfolds its group.
             app.query_one(ChangeTable).highlight("old", reveal=True)
             assert rows.get_option_at_index(rows.highlighted).id == "c:old"

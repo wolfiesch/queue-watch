@@ -680,7 +680,11 @@ class ChangeTable(Vertical):
         self.highlight(self.selected)
 
     def highlight(self, key: str | None, reveal: bool = False) -> None:
-        """Move the cursor to a change; ``reveal`` unfolds its group if needed."""
+        """Move the cursor to a change; ``reveal`` unfolds its group if needed.
+
+        A change in a folded group puts the cursor on that group's row, so a rebuild
+        never leaves the list without a cursor.
+        """
         if key is None:
             return
         change = next((c for c in self.changes if c.key == key), None)
@@ -688,12 +692,15 @@ class ChangeTable(Vertical):
             self.folds[change.group] = False
             self.rebuild()
         rows = self.query_one("#rows", OptionList)
-        try:
-            index = rows.get_option_index(f"c:{key}")
-        except OptionDoesNotExist:
+        targets = [f"c:{key}"] + ([f"g:{change.group}"] if change else [])
+        for target in targets:
+            try:
+                index = rows.get_option_index(target)
+            except OptionDoesNotExist:
+                continue
+            if rows.highlighted != index:
+                rows.highlighted = index
             return
-        if rows.highlighted != index:
-            rows.highlighted = index
 
     def toggle(self, group: str) -> None:
         self.folds[group] = not self.folded(group)
