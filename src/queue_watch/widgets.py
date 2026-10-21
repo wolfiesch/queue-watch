@@ -347,17 +347,22 @@ def chain_order(records: list[dict]) -> list[dict]:
 
 
 class QueueChip(Static):
-    """One queue entry: bordered, with its position in the border title."""
+    """One queue entry: bordered, with its position in the border title.
+
+    On short terminals (the app's ``-short`` class) it is one borderless line instead.
+    """
 
     def __init__(self, source: str, record: dict, change: Change | None, holder: bool) -> None:
         super().__init__(classes="chip holder" if holder else "chip")
         self.source, self.record, self.change, self.holder = source, record, change, holder
+        self.full = self.line = Content("")
 
     def on_mount(self) -> None:
         position = self.record.get("position")
         label = str(position) if isinstance(position, int) else raw(self.record)
+        label = f"{label} {SYMBOLS.dot} next" if self.holder else label
         # Strings assigned to border_title and tooltip parse as markup; Content does not.
-        self.border_title = Content(f"{label} {SYMBOLS.dot} next" if self.holder else label)
+        self.border_title = Content(label)
         title = clean(self.record["title"])
         if self.change and self.change.pr and not title.startswith("#"):
             title = f"#{self.change.pr} {title}"
@@ -365,12 +370,14 @@ class QueueChip(Static):
         tail: list[Any] = [muted(f" {SYMBOLS.dot} "), (eta_text(eta), "b")] if eta else []
         if not eta and self.record.get("owner"):
             tail = [muted(f" {SYMBOLS.dot} {clean(self.record['owner'])}")]
-        self.update(
-            Content.assemble(
-                (title, "b"), "\n", glyph(self.record["state"]), f" {raw(self.record)}", *tail
-            )
-        )
-        self.tooltip = Content(title)
+        state = glyph(self.record["state"])
+        self.full = Content.assemble((title, "b"), "\n", state, f" {raw(self.record)}", *tail)
+        self.line = Content.assemble(muted(f"{label} "), state, " ", (title, "b"), *tail)
+        self.tooltip = Content(f"{title}\n{raw(self.record)}")
+        self.refresh()
+
+    def render(self) -> Content:
+        return self.line if self.app.has_class("-short") else self.full
 
     def on_click(self) -> None:
         self.post_message(ChipClicked(self.source, self.record["id"]))

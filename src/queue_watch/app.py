@@ -106,6 +106,9 @@ Sparkline > .sparkline--min-color { color: $success; }
 .chip.holder { border: heavy $primary; background: $primary 14%; border-title-color: $primary; }
 .-ascii .chip { border: ascii $foreground 40%; }
 .-ascii .chip.holder { border: ascii $primary; }
+.-short .chip, .-short .chip:hover, .-short .chip.holder { height: 1; border: none; }
+.-short .chip:hover { background: $primary 30%; }
+.-short .chain .link, .-short .chain .more { height: 1; }
 
 #search { display: none; height: 1; border: none; padding: 0 1; margin: 0 1; background: $panel; }
 #body { height: 1fr; }
@@ -301,6 +304,11 @@ class QueueWatch(App):
 
     def on_resize(self, event: Resize) -> None:
         self.set_class(event.size.width < 120, "-narrow")
+        short = event.size.height < 30
+        if short != self.has_class("-short"):
+            self.set_class(short, "-short")
+            for chip in self.query(widgets.QueueChip):
+                chip.refresh(layout=True)
 
     # --- polling ----------------------------------------------------------- #
 
