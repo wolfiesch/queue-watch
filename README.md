@@ -2,7 +2,19 @@
 
 Read-only terminal dashboard for CI runs and merge queues. It joins records from every source into one row per change, so a branch's CI runs and its merge-queue entry read together, and draws each merge queue as a chain of chips in queue order. queue-watch never reruns, cancels, merges or takes a lock.
 
-![queue-watch showing a merge queue of four changes, the Changes table grouped by state, and the inspector for a failed change](https://raw.githubusercontent.com/wolfiesch/queue-watch/main/docs/screenshot.png)
+![queue-watch --demo: a merge queue landing changes one after another while CI runs finish, one fails and a fix goes through](https://raw.githubusercontent.com/wolfiesch/queue-watch/main/docs/demo.gif)
+
+Try it without a GitHub login:
+
+```sh
+uvx queue-watch --demo
+```
+
+## Why
+
+`gh run watch` follows one run, and GitHub's web UI shows Actions and the merge queue on separate pages. When several pull requests are queued at once, the questions are about the whole set: which one is merging now, which are waiting on checks, which failure is holding the queue up, and when the last one should land.
+
+queue-watch answers them on one screen for a whole repository and keeps refreshing on its own. It joins each change's CI runs and queue entry into one row, puts the attention cases first, and shows the queue in merge order with GitHub's estimates. It also watches queues GitHub never sees: a merge lock on a build host, or anything a short script can describe as JSON.
 
 ## Install
 
@@ -11,7 +23,7 @@ uv tool install queue-watch     # or: pipx install queue-watch
 uvx queue-watch                 # run once without installing
 ```
 
-Requires Python 3.11+. The GitHub adapters use an authenticated [GitHub CLI](https://cli.github.com/) (`gh auth login`).
+Requires Python 3.11+. The GitHub adapters use an authenticated [GitHub CLI](https://cli.github.com/) (`gh auth login`); `--demo` needs neither.
 
 ## Use
 
@@ -21,6 +33,7 @@ queue-watch --repo owner/repo            # Actions plus the merge queue, if any
 queue-watch --profile work               # ~/.config/queue-watch/work.toml
 queue-watch --config sources.toml        # any combination of sources
 queue-watch --repo owner/repo --once     # one JSON snapshot, no TUI
+queue-watch --demo                       # a simulated repository
 queue-watch --theme nord --ascii         # another Textual theme; ASCII glyphs only
 queue-watch --density comfortable        # title, owner and PR on a second line
 ```
@@ -28,6 +41,8 @@ queue-watch --density comfortable        # title, owner and PR on a second line
 With no flags, queue-watch looks for a `.queue-watch.toml` at the root of the current Git checkout. Without one, it watches the checkout's GitHub repository: Actions runs, plus the merge queue when the default branch has one. `--profile NAME` reads `$XDG_CONFIG_HOME/queue-watch/NAME.toml` (default `~/.config`).
 
 The Changes tab groups changes into Needs attention, Running, Queued and Done; every view a source reports also gets its own tab. Done starts folded while any other group has changes; press enter on a group row, or click it, to fold or unfold it. Select a change or a queue chip to see its CI checks, the jobs of the most notable one, its queue position and ETA, and recent history in the inspector.
+
+![queue-watch showing a merge queue of four changes, the Changes table grouped by state, and the inspector for a failed change](https://raw.githubusercontent.com/wolfiesch/queue-watch/main/docs/screenshot.png)
 
 Each merge queue gets a strip above the tabs: its entries in merge order, when it should clear, merges in the last hour, and how long recent attempts took. Queue depth over the session appears as a sparkline once two fetches have answered; sources report only the current queue, so the history starts when queue-watch does. On terminals under 30 rows the entries shrink to one line each.
 
@@ -109,7 +124,7 @@ uv run pytest -q                        # includes SVG snapshot tests
 uv run pytest -q --snapshot-update      # after an intended layout change
 ```
 
-`docs/screenshot.png` is the wide layout snapshot rendered in a browser. To release, bump `__version__` in `src/queue_watch/__init__.py`, merge, and push a matching `vX.Y.Z` tag; the release workflow tests, builds, publishes to PyPI with trusted publishing, and creates the GitHub release.
+`docs/screenshot.png` is the wide layout snapshot rendered in a browser; `uv run python docs/record_demo.py` re-records `docs/demo.gif` (needs Chrome and ffmpeg). To release, bump `__version__` in `src/queue_watch/__init__.py`, merge, and push a matching `vX.Y.Z` tag; the release workflow tests, builds, publishes to PyPI with trusted publishing, and creates the GitHub release.
 
 ## License
 

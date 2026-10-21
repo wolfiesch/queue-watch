@@ -17,6 +17,7 @@ Examples:
   queue-watch --profile work                # ~/.config/queue-watch/work.toml
   queue-watch --config sources.toml --once
   queue-watch trust                         # after reviewing .queue-watch.toml
+  queue-watch --demo                        # simulated repository, no login needed
 """
 
 from __future__ import annotations
@@ -86,6 +87,9 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument("--repo", help="GitHub owner/repo: Actions plus any merge queue")
     group.add_argument("--config", type=Path, help="TOML file with [[source]] tables")
     group.add_argument("--profile", help="NAME for ~/.config/queue-watch/NAME.toml")
+    group.add_argument(
+        "--demo", action="store_true", help="simulated repository; no network or login"
+    )
     parser.add_argument("--once", action="store_true", help="print JSON once; no TUI")
     parser.add_argument(
         "--theme", default="queue-watch", help="Textual theme (default queue-watch: black)"
@@ -100,7 +104,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     try:
-        if args.config:
+        if args.demo:
+            from . import demo, widgets
+
+            clock = demo.Clock()
+            widgets.now = clock.now  # ages and estimates follow the simulated clock
+            sources = demo.sources(clock)
+        elif args.config:
             sources = load(args.config.expanduser())
         elif args.profile:
             sources = load(profile_path(args.profile))

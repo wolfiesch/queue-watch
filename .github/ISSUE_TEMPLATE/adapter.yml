@@ -1,0 +1,23 @@
+name: Adapter request
+description: Watch another CI system or merge queue (GitLab, Buildkite, Jenkins, Bors, Mergify, ...)
+labels: [adapter]
+body:
+  - type: input
+    id: system
+    attributes:
+      label: System
+      placeholder: GitLab merge trains
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Where the data comes from
+      description: The API, CLI or file that reports queue order, state and timing, with a link to its documentation.
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Tried the command adapter?
+      description: The `command` adapter runs any program that prints a snapshot, so a short script often works today. If you wrote one, share it or say what it could not express.

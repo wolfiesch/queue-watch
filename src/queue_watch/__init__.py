@@ -1,3 +1,3 @@
 """Read-only terminal dashboard for CI runs and merge queues."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
