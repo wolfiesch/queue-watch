@@ -21,7 +21,7 @@ queue-watch --repo owner/repo            # Actions plus the merge queue, if any
 queue-watch --profile work               # ~/.config/queue-watch/work.toml
 queue-watch --config sources.toml        # any combination of sources
 queue-watch --repo owner/repo --once     # one JSON snapshot, no TUI
-queue-watch --theme nord --ascii         # any Textual theme; ASCII glyphs only
+queue-watch --theme nord --ascii         # another Textual theme; ASCII glyphs only
 queue-watch --density comfortable        # title, owner and PR on a second line
 ```
 
@@ -32,6 +32,8 @@ The Changes tab groups changes into Needs attention, Running, Queued and Done; e
 Each merge queue gets a strip above the tabs: its entries in merge order, when it should clear, merges in the last hour, and how long recent attempts took. Queue depth over the session appears as a sparkline once two fetches have answered; sources report only the current queue, so the history starts when queue-watch does. On terminals under 30 rows the entries shrink to one line each.
 
 Keyboard: arrows to move, `1` to `9` for tabs, `/` to search (esc to clear), `o` to open the selection in a browser, `c` to copy its SHA, `d` to switch row density, `r` to refresh, `p` to pause, `q` to quit. The mouse works too: click tabs, rows, chips and the inspector buttons, and scroll with the wheel. When a source fails, its last good data stays on screen and its status pill turns stale.
+
+The default `queue-watch` theme draws on a black background and gives each region its own coloured box. Pass `--theme` with any Textual theme name, or pick one live from the command palette (ctrl+p).
 
 ### Repository configs need trust
 

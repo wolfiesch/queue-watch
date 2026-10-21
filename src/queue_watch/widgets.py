@@ -399,6 +399,7 @@ class QueueStrip(Vertical):
     def __init__(self, source: str, label: str) -> None:
         super().__init__(classes="queue")
         self.source, self.label = source, label
+        self.border_title = Content(clean(label))
         self.entries: list[dict] = []
         self.attempts: list[dict] = []  # with a duration: the "took" trend
         self.merges: list[float] = []  # finish times of every successful attempt
@@ -440,15 +441,13 @@ class QueueStrip(Vertical):
 
     def head(self) -> None:
         waiting = len(self.entries)
-        status = f"  {waiting} waiting"
+        status = f"{waiting} waiting"
         if not waiting:
-            status = "  nothing waiting"
+            status = "nothing waiting"
             if self.merges:
                 last = short_age(now() - max(self.merges))
                 status += f" {SYMBOLS.dot} last merge {last} ago"
-        self.query_one(".queue-title", Static).update(
-            Content.assemble((clean(self.label).upper(), "b"), muted(status))
-        )
+        self.query_one(".queue-title", Static).update(Content.assemble((status, "b")))
         clears = max((eta_of(e) or 0 for e in self.entries), default=0)
         self.query_one(".queue-eta", Static).update(
             Content.assemble(muted("clears in "), (eta_text(clears), "b")) if clears else ""
@@ -733,6 +732,7 @@ class Inspector(VerticalScroll):
 
     def __init__(self) -> None:
         super().__init__(id="inspector")
+        self.border_title = Content("inspector")
         self.pairs: list[tuple[Static, Static]] = []
 
     def compose(self) -> ComposeResult:

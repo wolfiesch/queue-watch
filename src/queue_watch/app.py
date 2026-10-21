@@ -22,6 +22,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.content import Content
 from textual.events import Resize
+from textual.theme import Theme
 from textual.widgets import Button, DataTable, Footer, Input, Static, TabbedContent, TabPane
 
 from . import widgets
@@ -65,10 +66,40 @@ CHANGES = "changes-tab"
 CHILD_TTL = 15
 BAR = 8  # job duration bar cells; a job line fits the narrowest inspector
 
+# The default theme: a black backdrop like most terminals, with one hue per box (queue
+# strips use accent, the tabs primary, the inspector secondary) to give the screen structure.
+THEME = Theme(
+    name="queue-watch",
+    primary="#5FAFFF",
+    secondary="#AF87FF",
+    accent="#FF875F",
+    warning="#FFD75F",
+    error="#FF5F6D",
+    success="#5FD787",
+    foreground="#D4D4D4",
+    background="#000000",
+    surface="#000000",
+    panel="#000000",
+    dark=True,
+    variables={
+        "footer-background": "#000000",
+        "footer-key-foreground": "#FF875F",
+        "footer-description-foreground": "#9E9E9E",
+        "scrollbar": "#3A3A3A",
+        "scrollbar-hover": "#5A5A5A",
+        "scrollbar-active": "#5FAFFF",
+        "scrollbar-background": "#000000",
+        "scrollbar-background-hover": "#000000",
+        "scrollbar-background-active": "#000000",
+        "scrollbar-corner-color": "#000000",
+        "button-color-foreground": "#D4D4D4",
+    },
+)
+
 CSS = """
 Screen { background: $surface; }
 #status { height: 1; padding: 0 1; background: $panel; color: $foreground; }
-#status #brand { width: auto; margin-right: 2; color: $primary; }
+#status #brand { width: auto; margin-right: 2; color: $accent; }
 #status .pill { width: auto; padding: 0 1; margin-right: 1; }
 #status .pill.live { background: $success 25%; color: $text-success; }
 #status .pill.paused { background: $primary 20%; color: $text-primary; }
@@ -80,8 +111,18 @@ Screen { background: $surface; }
 .-narrow #status #counts-long { display: none; }
 .-narrow #status #counts-short { display: block; }
 
+/* One coloured, rounded box per region, titled in its top border. */
+.queue, #tabs, #inspector { border-title-style: bold; border-title-align: left; }
+.queue { border: round $accent 70%; border-title-color: $accent; }
+#tabs { border: round $primary 70%; border-title-color: $primary; }
+#inspector { border: round $secondary 70%; border-title-color: $secondary; }
+.-ascii .queue { border: ascii $accent 70%; }
+.-ascii #tabs { border: ascii $primary 70%; }
+.-ascii #inspector { border: ascii $secondary 70%; }
+.-short .queue { border: none; border-top: solid $accent 70%; }
+
 #queues { height: auto; }
-.queue { height: auto; padding: 0 1; border-bottom: solid $foreground 20%; }
+.queue { height: auto; padding: 0 1; }
 .queue-head { height: 1; }
 .queue-head .queue-title { width: auto; }
 .queue-head .queue-eta { width: 1fr; min-width: 18; padding-left: 2; }
@@ -121,7 +162,8 @@ Tabs { height: 2; }
 OptionList {
     height: 1fr; background: $surface; border: none; padding: 0; scrollbar-size-vertical: 1;
 }
-OptionList:focus { border: none; }
+OptionList:focus { border: none; background-tint: $foreground 0%; }
+DataTable:focus { background-tint: $foreground 0%; }
 OptionList > .option-list--option { padding: 0 1; }
 OptionList > .option-list--option-highlighted { background: $primary 28%; color: $foreground; text-style: none; }
 OptionList:focus > .option-list--option-highlighted { background: $primary 40%; color: $foreground; text-style: none; }
@@ -132,14 +174,14 @@ DataTable > .datatable--header { background: $panel; color: $text-muted; text-st
 DataTable > .datatable--cursor { background: $primary 30%; color: $foreground; }
 
 #inspector {
-    width: 32%; min-width: 40; max-width: 64; height: 1fr; padding: 0 1;
-    border-left: solid $foreground 20%; background: $surface; scrollbar-size-vertical: 1;
+    width: 32%; min-width: 42; max-width: 66; height: 1fr; padding: 0 1;
+    background: $surface; scrollbar-size-vertical: 1;
 }
 #insp-head { height: auto; padding-bottom: 1; }
 #insp-actions { height: auto; padding-bottom: 1; }
 #insp-actions Button { margin-right: 1; background: $primary 30%; color: $foreground; }
 #sections { height: auto; }
-.section-title { background: $panel; padding: 0 1; margin-top: 1; height: 1; }
+.section-title { background: $panel; color: $secondary; text-style: bold; padding: 0 1; margin-top: 1; height: 1; }
 .section-body { height: auto; padding: 0 1; }
 
 #notices { display: none; height: auto; max-height: 4; padding: 0 1; color: $text-warning; background: $panel; }
@@ -249,11 +291,12 @@ class QueueWatch(App):
         self,
         sources: list[Source],
         *,
-        theme: str = "tokyo-night",
+        theme: str = THEME.name,
         ascii: bool = False,
         density: str = "compact",
     ):
         super().__init__()
+        self.register_theme(THEME)
         self.sources = {source.id: source for source in sources}
         self.order = list(self.sources)
         self.initial_theme = theme

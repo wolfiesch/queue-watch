@@ -149,7 +149,7 @@ def test_empty_states_say_why_nothing_is_shown() -> None:
             if "mq" in app.strips:
                 strip = app.strips["mq"]
                 title = str(strip.query_one(".queue-title").render())
-                assert title == "MQ  nothing waiting · last merge 12m ago"
+                assert (strip.border_title, title) == ("MQ", "nothing waiting · last merge 12m ago")
                 # The attempt has no start time or duration but still counts as a merge.
                 assert str(strip.query_one(".rate").render()) == "✓ 1 merged/hr"
                 # With no changes the app opens the first source tab: the empty queue.
