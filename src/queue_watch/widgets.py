@@ -388,6 +388,7 @@ class QueueStrip(Vertical):
         self.source, self.label = source, label
         self.entries: list[dict] = []
         self.attempts: list[dict] = []
+        self.last_merge = 0.0
         self.by_record: dict[str, Change] = {}
         self.built: tuple | None = None
         # Queue length after each fetch this session; sources keep no history of it.
@@ -415,17 +416,28 @@ class QueueStrip(Vertical):
             (r for r in records if r["kind"] == "attempt" and elapsed(r) is not None),
             key=lambda r: stamp(r, "finished_at", "started_at"),
         )
+        self.last_merge = max(
+            (
+                stamp(r, "finished_at")
+                for r in records
+                if r["kind"] == "attempt" and r["state"] == "success"
+            ),
+            default=0.0,
+        )
         self.by_record = by_record
         self.head()
         await self.chain()
 
     def head(self) -> None:
         waiting = len(self.entries)
-        title = Content.assemble(
-            (clean(self.label).upper(), "b"),
-            muted(f"  {waiting} waiting" if waiting else "  empty"),
+        status = f"  {waiting} waiting"
+        if not waiting:
+            status = "  nothing waiting"
+            if self.last_merge:
+                status += f" {SYMBOLS.dot} last merge {short_age(now() - self.last_merge)} ago"
+        self.query_one(".queue-title", Static).update(
+            Content.assemble((clean(self.label).upper(), "b"), muted(status))
         )
-        self.query_one(".queue-title", Static).update(title)
         clears = max((eta_of(e) or 0 for e in self.entries), default=0)
         self.query_one(".queue-eta", Static).update(
             Content.assemble(muted("clears in "), (eta_text(clears), "b")) if clears else ""

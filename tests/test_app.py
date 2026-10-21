@@ -22,15 +22,24 @@ class Fake(Adapter):
     name = "fake"
     label = "Fake"
 
-    def __init__(self, records: list[dict]) -> None:
-        self.records = records
+    def __init__(self, records: list[dict], views: list[dict] | None = None) -> None:
+        self.records, self.views = records, views or []
 
     async def snapshot(self) -> dict:
         return {
             "schema": "queue-watch.snapshot/1",
             "observed_at": iso(0),
             "records": self.records,
+            "views": self.views,
         }
+
+
+class Down(Adapter):
+    name = "down"
+    label = "Down"
+
+    async def snapshot(self) -> dict:
+        raise RuntimeError("connection refused")
 
 
 CI = [
@@ -102,6 +111,69 @@ async def loaded(pilot) -> None:
             await pilot.pause()
             return
     raise AssertionError("sources never answered")
+
+
+async def answered(pilot) -> None:
+    """Wait until every source has answered or failed and the view has caught up."""
+    app = pilot.app
+    for _ in range(100):
+        await pilot.pause(0.02)
+        if all(s in app.updated or s in app.errors for s in app.sources):
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            return
+    raise AssertionError("sources never settled")
+
+
+def test_empty_states_say_why_nothing_is_shown() -> None:
+    note = {"id": "n1", "kind": "note", "state": "success", "title": "No branch here"}
+    merged = {
+        "id": "a1",
+        "kind": "attempt",
+        "state": "success",
+        "title": "#9",
+        "finished_at": iso(12),
+    }
+    queue_view = {"kind": "queue_entry", "label": "Queue", "columns": [{"key": "title"}]}
+    cases = [
+        ([Source("a", "A", 60, Down()), Source("b", "B", 60, Down())], "No source answered."),
+        ([Source("a", "A", 60, Fake([]))], "Every source answered with no records."),
+        ([Source("a", "A", 60, Fake([note]))], "None of the 1 record names a branch"),
+        ([Source("mq", "MQ", 60, Fake([merged], [queue_view]))], "nothing waiting"),
+    ]
+
+    async def run(given: list[Source], expected: str) -> None:
+        app = QueueWatch(given)
+        async with app.run_test(size=(160, 45)) as pilot:
+            await answered(pilot)
+            if "mq" in app.strips:
+                title = str(app.strips["mq"].query_one(".queue-title").render())
+                assert title == "MQ  nothing waiting · last merge 12m ago"
+                # With no changes the app opens the first source tab: the empty queue.
+                assert app.query_one("#tabs", TabbedContent).active != "changes-tab"
+                head = str(app.query_one("#insp-head").render())
+                assert head == "MQ has sent no rows for this view yet."
+                return
+            rows = app.query_one("#rows", OptionList)
+            assert str(rows.get_option_at_index(0).prompt).startswith(expected)
+
+    for given, expected in cases:
+        asyncio.run(run(given, expected))
+
+
+def test_search_with_no_hits_names_the_query() -> None:
+    async def run() -> None:
+        app = QueueWatch(sources())
+        async with app.run_test(size=(120, 40)) as pilot:
+            await loaded(pilot)
+            await pilot.press("slash", *"zzz")
+            await pilot.pause()
+            rows = app.query_one("#rows", OptionList)
+            assert (
+                str(rows.get_option_at_index(0).prompt) == 'No changes match "zzz". esc to clear.'
+            )
+
+    asyncio.run(run())
 
 
 def test_changes_correlate_across_sources_and_chips_select_them() -> None:

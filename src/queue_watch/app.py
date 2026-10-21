@@ -406,9 +406,7 @@ class QueueWatch(App):
         ordered = [change for *_, members in grouped(visible) for change in members]
         if self.selected not in {change.key for change in ordered}:
             self.selected = ordered[0].key if ordered else None
-        empty = "No changes match the search." if self.query_text() else "No changes yet."
-        if not snapshots:
-            empty = "Waiting for sources..."
+        empty = self.empty_changes(snapshots)
         queue = any(change.entries or change.attempts for change in changes)
         self.query_one(ChangeTable).show(visible, queue, self.selected, empty)
         tabs = self.query_one("#tabs", TabbedContent)
@@ -421,6 +419,32 @@ class QueueWatch(App):
             await strip.show(records, mine)
         self.rebuild_tables()
         await self.show_selection()
+
+    def empty_changes(self, snapshots: dict[str, dict]) -> str:
+        """Why the Changes tab has no rows, in the user's terms."""
+        if self.query_text():
+            return (
+                f'No changes match "{clean(self.query_one("#search", Input).value)}". esc to clear.'
+            )
+        pending = [
+            clean(self.sources[s].label)
+            for s in self.order
+            if s not in self.updated and s not in self.errors
+        ]
+        if not snapshots:
+            if pending:
+                return f"Waiting for {', '.join(pending)}..."
+            return "No source answered. Their errors are listed at the bottom."
+        if pending:
+            return f"No changes yet. Still waiting for {', '.join(pending)}..."
+        records = sum(len(snapshot["records"]) for snapshot in snapshots.values())
+        if not records:
+            return "Every source answered with no records."
+        noun = "record names" if records == 1 else "records name"
+        return (
+            f"None of the {records} {noun} a branch or commit on a run, queue entry, or attempt. "
+            "The source tabs list them."
+        )
 
     def rebuild_tables(self) -> None:
         self.rendering = True
@@ -526,9 +550,12 @@ class QueueWatch(App):
             record = self.current_record(name)
             target = ("record", name, record["id"] if record else None)
             if record is None:
-                await inspector.show(
-                    dim("No rows match this view."), [], url=False, sha=False, reset=True
-                )
+                if self.query_text():
+                    text = "No rows match the search. esc to clear."
+                else:
+                    label = self.sources[source_id].label
+                    text = f"{label} has sent no rows for this view yet."
+                await inspector.show(dim(clean(text)), [], url=False, sha=False, reset=True)
                 self.shown = target
                 return
             head, sections, lazy = self.record_view(source_id, record)
