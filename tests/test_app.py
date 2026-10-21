@@ -92,12 +92,16 @@ def sources() -> list[Source]:
 
 
 async def loaded(pilot) -> None:
+    """Wait until every source has answered and its rebuild has finished."""
     app = pilot.app
     for _ in range(100):
         await pilot.pause(0.02)
-        if len(app.updated) == 2 and len(app.query(QueueChip)) == 2:
+        if len(app.updated) == len(app.sources):
+            # updated is set before the fetch worker rebuilds the view.
+            await app.workers.wait_for_complete()
+            await pilot.pause()
             return
-    raise AssertionError("sources never rendered")
+    raise AssertionError("sources never answered")
 
 
 def test_changes_correlate_across_sources_and_chips_select_them() -> None:
