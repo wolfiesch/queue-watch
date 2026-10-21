@@ -1,0 +1,8 @@
+# queue-watch --config examples/sources.toml
+# Paths in `command` and `cwd` are relative to this file's directory.
+
+[[source]]
+id = "deploys"
+adapter = "command"
+label = "Deploys"
+command = ["python3", "queue-status.py", "queue.json"]

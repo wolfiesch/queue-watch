@@ -41,7 +41,7 @@ STATES = (
 )
 ACTIVE = frozenset({"queued", "running", "blocked"})
 ATTENTION = frozenset({"failure", "blocked"})
-FORMATS = ("text", "state", "clock", "age", "seconds", "sha")
+FORMATS = ("text", "state", "clock", "age", "seconds", "duration", "sha")
 TIME_FIELDS = ("created_at", "updated_at", "started_at", "finished_at")
 TEXT_FIELDS = ("raw_state", "subtitle", "ref", "sha", "owner", "url")
 

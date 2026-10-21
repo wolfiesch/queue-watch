@@ -29,7 +29,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from ..model import DEFAULT_VIEWS, SCHEMA
-from ..process import run_json
+from ..process import check_host, over_ssh, run_json
 from . import Adapter
 
 OUTCOMES = {
@@ -245,9 +245,7 @@ class FlockQueue(Adapter):
         history_limit: int = 30,
         history_columns: list[dict] | None = None,
     ):
-        if host is not None and (not host or host.startswith("-")):
-            raise ValueError("host must be an SSH destination, not an option")
-        self.host = host
+        self.host = check_host(host)
         self.options = {
             "root": root,
             "lock": lock,
@@ -266,10 +264,7 @@ class FlockQueue(Adapter):
             return await asyncio.to_thread(flock_probe, self.options)
         source = PROBE_PRELUDE + inspect.getsource(flock_probe)
         source += f"\nprint(json.dumps(flock_probe(json.loads({json.dumps(self.options)!r}))))\n"
-        return await run_json(
-            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", self.host, "python3 -"],
-            stdin=source,
-        )
+        return await run_json(over_ssh(self.host, ["python3", "-"]), stdin=source)
 
     async def snapshot(self) -> dict:
         raw = await self.probe()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import time
 
 import pytest
 
@@ -106,6 +107,13 @@ def test_command_timeout_does_not_hang_refresh():
         asyncio.run(
             process.run_json([sys.executable, "-c", "import time; time.sleep(60)"], timeout=0.05)
         )
+
+
+def test_timeout_is_not_held_open_by_child_processes():
+    started = time.monotonic()
+    with pytest.raises(TimeoutError):
+        asyncio.run(process.run_json(["sh", "-c", "sleep 30 & sleep 30"], timeout=0.5))
+    assert time.monotonic() - started < 5
 
 
 def test_invalid_command_output_is_not_an_empty_success():
