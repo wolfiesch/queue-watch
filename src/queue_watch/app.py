@@ -55,9 +55,16 @@ def clock(value: str | None) -> str:
 
 def age(value: str | None) -> str:
     try:
-        seconds = max(0, int(time.time() - datetime.fromisoformat(value).timestamp()))
+        seconds = time.time() - datetime.fromisoformat(value).timestamp()
     except (ValueError, TypeError):
         return "?"
+    return duration(seconds)
+
+
+def duration(value: object) -> str:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return "-"
+    seconds = max(0, int(value))
     if seconds < 60:
         return f"{seconds}s"
     if seconds < 3600:
@@ -81,6 +88,8 @@ def cell(record: dict, column: dict) -> Text | str:
             return age(value)
         case "seconds":
             return f"{value:.1f}s" if isinstance(value, (int, float)) else "-"
+        case "duration":
+            return duration(value)
         case "sha":
             return Text(clean(value or "")[:8])
     return Text(clean(value) if value is not None else "-")

@@ -5,16 +5,37 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import shlex
 from typing import Any
 
 
-async def run_json(argv: list[str], *, stdin: str | None = None, timeout: float = 25) -> Any:
+def check_host(host: str | None) -> str | None:
+    """An SSH destination, never something ssh would parse as an option."""
+    if host is not None and (not isinstance(host, str) or not host or host.startswith("-")):
+        raise ValueError("host must be an SSH destination, not an option")
+    return host
+
+
+def over_ssh(host: str, argv: list[str], cwd: str | None = None) -> list[str]:
+    """Run ``argv`` on ``host`` with every argument quoted for the remote shell."""
+    command = shlex.join(argv)
+    if cwd:
+        # Keep a leading ~/ unquoted so the remote shell expands it.
+        target = "~/" + shlex.quote(cwd[2:]) if cwd.startswith("~/") else shlex.quote(cwd)
+        command = f"cd {target} && {command}"
+    return ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", host, "--", command]
+
+
+async def run_json(
+    argv: list[str], *, stdin: str | None = None, timeout: float = 25, cwd: str | None = None
+) -> Any:
     """Run ``argv`` and parse stdout as JSON; a nonzero exit raises RuntimeError."""
     process = await asyncio.create_subprocess_exec(
         *argv,
         stdin=asyncio.subprocess.PIPE if stdin is not None else asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        cwd=cwd,
     )
     try:
         stdout, stderr = await asyncio.wait_for(
