@@ -202,21 +202,35 @@ async def add_to_profile(name: str, repos: list[str]) -> tuple[Path, list[str], 
         existing = tomllib.loads(text).get("source") or []
     except tomllib.TOMLDecodeError as error:
         raise ConfigError(f"{path}: {error}") from error
-    present = {entry.get("repo") for entry in existing if isinstance(entry, dict)}
+    present = {
+        entry["repo"].casefold()
+        for entry in existing
+        if isinstance(entry, dict) and isinstance(entry.get("repo"), str)
+    }
+    ids = {entry.get("id") for entry in existing if isinstance(entry, dict)}
     added, skipped = [], []
-    for repo in dict.fromkeys(repos):
-        if repo in present:
+    for repo in repos:
+        if repo.casefold() in present:
             skipped.append(repo)
             continue
-        prefix = repo.replace("/", "-").lower() + "-"
-        text += "".join(map(toml_table, await github_entries(repo, prefix)))
+        prefix = base = repo.replace("/", "-").lower() + "-"
+        number = 2
+        while f"{prefix}ci" in ids or f"{prefix}merge-queue" in ids:  # a-b/c and a/b-c
+            prefix, number = f"{base}{number}-", number + 1
+        entries = await github_entries(repo, prefix)
+        text += "".join(map(toml_table, entries))
+        ids.update(entry["id"] for entry in entries)
+        present.add(repo.casefold())
         added.append(repo)
     if added:
         parse(text, path)  # Never write a profile that cannot load.
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False) as handle:
+        target = path.resolve()  # Keep a symlinked profile (dotfiles) a symlink.
+        target.parent.mkdir(parents=True, exist_ok=True)
+        mode = target.stat().st_mode & 0o777 if target.exists() else 0o644
+        with tempfile.NamedTemporaryFile("w", dir=target.parent, delete=False) as handle:
             handle.write(text)
-        os.replace(handle.name, path)
+        os.chmod(handle.name, mode)
+        os.replace(handle.name, target)
     return path, added, skipped
 
 

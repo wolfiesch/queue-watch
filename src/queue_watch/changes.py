@@ -138,8 +138,9 @@ class Change:
 def correlate(snapshots: dict[str, dict]) -> list[Change]:
     """One Change per repository and ref (falling back to sha), in merge order, then
     most recent. Repositories only separate changes when more than one appears."""
+    # GitHub repository names are case-insensitive.
     repos = {
-        record["repo"]
+        record["repo"].casefold()
         for snapshot in snapshots.values()
         for record in snapshot.get("records", [])
         if record.get("repo")
@@ -153,17 +154,18 @@ def correlate(snapshots: dict[str, dict]) -> list[Change]:
             ref, sha = record.get("ref"), record.get("sha")
             if record["kind"] not in ROLES or not (ref or sha):
                 continue
-            repo = record.get("repo") if several else None
-            change = (ref and by_ref.get((repo, ref))) or (sha and by_sha.get((repo, sha)))
+            repo = (record.get("repo") or None) if several else None
+            scope = repo and repo.casefold()
+            change = (ref and by_ref.get((scope, ref))) or (sha and by_sha.get((scope, sha)))
             if not change:
                 name = ref or sha
-                change = Change(key=f"{repo}:{name}" if repo else name, repo=repo)
+                change = Change(key=f"{scope}:{name}" if scope else name, repo=repo)
                 changes.append(change)
             if ref:
-                by_ref.setdefault((repo, ref), change)
+                by_ref.setdefault((scope, ref), change)
                 change.ref = change.ref or ref
             if sha:
-                by_sha.setdefault((repo, sha), change)
+                by_sha.setdefault((scope, sha), change)
                 change.sha = change.sha or sha
             hit = Hit(source, record)
             match record["kind"]:

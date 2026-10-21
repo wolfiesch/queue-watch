@@ -128,3 +128,21 @@ def test_profile_add_rejects_a_bad_repository_without_writing(tmp_path, monkeypa
         cli.main(["profile", "add", "work", "--repo", "not-a-repo"])
     assert "owner/repo" in capsys.readouterr().err
     assert not discovery.profile_path("work").exists()
+
+
+def test_profile_add_keeps_ids_unique_and_symlinks_and_mode_intact(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setattr(github_merge_queue, "has_queue", lambda repo: asyncio.sleep(0, False))
+    real = tmp_path / "dotfiles" / "work.toml"
+    real.parent.mkdir()
+    real.write_text(CONFIG)
+    real.chmod(0o640)
+    discovery.profile_dir().mkdir(parents=True)
+    discovery.profile_path("work").symlink_to(real)
+
+    path, added, skipped = asyncio.run(
+        discovery.add_to_profile("work", ["a-b/c", "a/b-c", "O/R", "a/B-C"])
+    )
+    assert (added, skipped) == (["a-b/c", "a/b-c"], ["O/R", "a/B-C"])
+    assert path.is_symlink() and real.stat().st_mode & 0o777 == 0o640
+    assert [s.id for s in discovery.load(path)] == ["ci", "a-b-c-ci", "a-b-c-2-ci"]

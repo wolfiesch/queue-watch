@@ -98,6 +98,19 @@ def test_same_branch_in_different_repositories_stays_apart() -> None:
     assert by_key["acme/api:main"].state == "success"
     assert (by_key["acme/web:main"].repo, by_key["main"].repo) == ("acme/web", None)
 
+    # Repository names are case-insensitive; an empty one is no repository.
+    mixed = snap(
+        record("q2", "queue_entry", "queued", ref="main", repo="Acme/Web", position=1),
+        record("q3", "queue_entry", "queued", ref="main", repo="", position=2),
+    )
+    changes = correlate({"api": api, "web": web, "mixed": mixed})
+    assert sorted((c.key, len(c.runs), len(c.entries)) for c in changes) == [
+        ("acme/api:feat/x", 1, 0),
+        ("acme/api:main", 1, 0),
+        ("acme/web:main", 1, 1),
+        ("main", 0, 1),
+    ]
+
     # With one repository, records without one still join it, and keys stay plain.
     changes = correlate({"api": snap(api["records"][0]), "local": local})
     assert [(change.key, change.repo, len(change.entries)) for change in changes] == [
