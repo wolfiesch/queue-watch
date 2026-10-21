@@ -1,17 +1,33 @@
 [project]
 name = "queue-watch"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Read-only terminal dashboard for CI runs and merge queues, with mouse support"
 readme = "README.md"
 license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Wolfgang Schoenberger" }]
 requires-python = ">=3.11"
 dependencies = ["textual>=6,<7"]
+keywords = ["ci", "merge-queue", "github-actions", "tui", "textual", "dashboard"]
 classifiers = [
+    "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Build Tools",
+    "Topic :: Software Development :: Testing",
 ]
+
+[project.urls]
+Homepage = "https://github.com/wolfiesch/queue-watch"
+Issues = "https://github.com/wolfiesch/queue-watch/issues"
+Changelog = "https://github.com/wolfiesch/queue-watch/releases"
 
 [project.scripts]
 queue-watch = "queue_watch.cli:main"
@@ -23,8 +39,14 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling>=1.25"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/queue_watch/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/tests", "/examples", "/README.md", "/LICENSE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

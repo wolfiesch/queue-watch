@@ -277,7 +277,6 @@ wheels = [
 
 [[package]]
 name = "queue-watch"
-version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "textual" },
