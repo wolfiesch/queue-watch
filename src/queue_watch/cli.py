@@ -89,6 +89,13 @@ def main(argv: list[str] | None = None) -> int:
         "--theme", default="tokyo-night", help="Textual theme (default tokyo-night)"
     )
     parser.add_argument("--ascii", action="store_true", help="ASCII glyphs and borders only")
+    parser.add_argument(
+        "--density",
+        choices=("compact", "comfortable"),
+        default="compact",
+        help="change rows: compact one-line, or comfortable with title, owner and PR "
+        "on a second line (press d to switch)",
+    )
     args = parser.parse_args(argv)
     try:
         if args.config:
@@ -107,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("interactive mode needs a terminal; use --once for JSON")
     from .app import QueueWatch
 
-    app = QueueWatch(sources, theme=args.theme, ascii=args.ascii)
+    app = QueueWatch(sources, theme=args.theme, ascii=args.ascii, density=args.density)
     if args.theme not in app.available_themes:
         parser.error(
             f"unknown theme {args.theme!r}; choose from {', '.join(sorted(app.available_themes))}"

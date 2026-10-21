@@ -246,11 +246,32 @@ def test_queue_depth_is_sampled_once_per_fetch() -> None:
 
 def test_change_rows_exactly_fill_the_table_at_every_width() -> None:
     # Wider rows wrap in the OptionList; narrower ones leave the AGE column unaligned.
-    for queue in (True, False):
-        for width in range(35, 200):
-            cols = change_columns(width, queue)
-            assert sum(c.width for c in cols) + len(cols) - 1 == width, (width, queue)
-            assert cols[-1].key == "age"
+    for comfortable in (False, True):
+        for queue in (True, False):
+            for width in range(35, 200):
+                cols = change_columns(width, queue, comfortable)
+                assert sum(c.width for c in cols) + len(cols) - 1 == width, (width, queue)
+                assert cols[-1].key == "age"
+                if comfortable:
+                    assert not {"pr", "title", "owner"} & {c.key for c in cols}
+
+
+def test_density_toggle_moves_title_owner_and_pr_to_a_second_line() -> None:
+    async def run() -> None:
+        app = QueueWatch(sources(), density="comfortable")
+        async with app.run_test(size=(160, 45)) as pilot:
+            await loaded(pilot)
+            rows = app.query_one("#rows", OptionList)
+            prompt = rows.get_option("c:fix-a").prompt
+            first, second = str(prompt).split("\n")
+            assert "#12" not in first and "TITLE" not in str(app.query_one("#colhead").render())
+            assert second.strip() == "Fix A · #12"
+            assert len(second) == len(first)
+            await pilot.press("d")
+            assert "\n" not in str(rows.get_option("c:fix-a").prompt)
+            assert "TITLE" in str(app.query_one("#colhead").render())
+
+    asyncio.run(run())
 
 
 def test_markup_in_adapter_strings_is_shown_literally() -> None:

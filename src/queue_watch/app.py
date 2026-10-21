@@ -237,15 +237,24 @@ class QueueWatch(App):
         Binding("escape", "clear", "Clear", show=False),
         Binding("o", "open", "Open"),
         Binding("c", "copy_sha", "Copy SHA"),
+        Binding("d", "density", "Density"),
         Binding("1", "tab(0)", "Changes"),
         *(Binding(str(n), f"tab({n - 1})", show=False) for n in range(2, 10)),
     ]
 
-    def __init__(self, sources: list[Source], *, theme: str = "tokyo-night", ascii: bool = False):
+    def __init__(
+        self,
+        sources: list[Source],
+        *,
+        theme: str = "tokyo-night",
+        ascii: bool = False,
+        density: str = "compact",
+    ):
         super().__init__()
         self.sources = {source.id: source for source in sources}
         self.order = list(self.sources)
         self.initial_theme = theme
+        self.initial_density = density
         if ascii:
             widgets.use_ascii()
         self.set_class(ascii, "-ascii")
@@ -274,7 +283,7 @@ class QueueWatch(App):
         yield Input(placeholder="Search changes and records (esc to clear)", id="search")
         with Horizontal(id="body"):
             with TabbedContent(id="tabs", initial=CHANGES), TabPane("Changes", id=CHANGES):
-                yield ChangeTable()
+                yield ChangeTable(self.initial_density)
             yield Inspector()
         yield Static(id="notices")
         yield Footer()
@@ -806,6 +815,11 @@ class QueueWatch(App):
     def focus_view(self) -> None:
         name = self.active_pane()
         self.query_one(f"#{name}" if name else "#rows").focus()
+
+    def action_density(self) -> None:
+        table = self.query_one(ChangeTable)
+        table.density = "compact" if table.density == "comfortable" else "comfortable"
+        table.rebuild()
 
     def action_refresh(self) -> None:
         for source_id in self.sources:

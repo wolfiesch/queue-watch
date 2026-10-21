@@ -521,15 +521,19 @@ class Column:
     align: str = "left"
 
 
-def change_columns(width: int, queue: bool) -> list[Column]:
-    """Columns for a table ``width`` cells wide; narrow tables keep the essentials."""
-    wide = width >= 96
-    cols = [Column("glyph", "", 1), Column("ref", "CHANGE", 18 if wide else 16)]
+def change_columns(width: int, queue: bool, comfortable: bool = False) -> list[Column]:
+    """Columns for a table ``width`` cells wide; narrow tables keep the essentials.
+
+    Comfortable rows carry title, owner and PR on a second line, so those columns go.
+    """
+    roomy = width >= 96
+    wide = roomy and not comfortable
+    cols = [Column("glyph", "", 1), Column("ref", "CHANGE", 18 if roomy else 16)]
     if wide:
         cols += [Column("pr", "PR", 6), Column("title", "TITLE", 0), Column("owner", "OWNER", 10)]
     cols.append(Column("ci", "CI", 20 if queue else 26))
     if queue:
-        cols.append(Column("queue", "QUEUE", 24 if wide else 16))
+        cols.append(Column("queue", "QUEUE", 24 if roomy else 16))
     cols.append(Column("age", "AGE", 4, "right"))
     flex = width - sum(c.width for c in cols) - (len(cols) - 1)
     if not wide or flex < 12:
@@ -573,16 +577,33 @@ def change_cell(col: Column, change: Change, compact: bool) -> Content:
     return Content("")
 
 
+def change_detail(change: Change, width: int) -> Content:
+    """Second line of a comfortable row: title, owner and PR under the change name."""
+    parts = [
+        part
+        for part in (
+            clean(change.title or ""),
+            clean(change.owner or ""),
+            f"#{change.pr}" if change.pr else "",
+        )
+        if part
+    ]
+    indent = 2  # under the change name, past the glyph column
+    detail = dim(f" {SYMBOLS.dot} ".join(parts) or SYMBOLS.dash)
+    return Content.assemble(" " * indent, fit(detail, width - indent, "left"))
+
+
 class ChangeTable(Vertical):
     """Header line over an OptionList: group rows are disabled, so the cursor skips them."""
 
-    def __init__(self) -> None:
+    def __init__(self, density: str = "compact") -> None:
         super().__init__(id="changes")
         self.changes: list[Change] = []
         self.queue = False
         self.selected: str | None = None
         self.width = 0
         self.empty = "Waiting for sources..."
+        self.density = density
 
     def compose(self) -> ComposeResult:
         yield Static(id="colhead")
@@ -602,7 +623,8 @@ class ChangeTable(Vertical):
     def rebuild(self) -> None:
         if not self.width:
             return
-        cols = change_columns(self.width, self.queue)
+        comfortable = self.density == "comfortable"
+        cols = change_columns(self.width, self.queue, comfortable)
         compact = self.width < 96
         head = Content(" ").join(
             fit(Content.assemble(muted(c.label)), c.width, c.align) for c in cols
@@ -626,6 +648,8 @@ class ChangeTable(Vertical):
                 row = Content(" ").join(
                     fit(change_cell(c, change, compact), c.width, c.align) for c in cols
                 )
+                if comfortable:
+                    row = Content("\n").join([row, change_detail(change, self.width)])
                 options.append(Option(row, id=f"c:{change.key}"))
         if not options:
             options.append(Option(dim(self.empty), id="g:empty", disabled=True))

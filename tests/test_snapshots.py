@@ -72,3 +72,8 @@ async def settled(pilot) -> None:
 @pytest.mark.parametrize("size", SIZES)
 def test_layout(snap_compare, size: str) -> None:
     assert snap_compare(QueueWatch(replay_sources()), terminal_size=SIZES[size], run_before=settled)
+
+
+def test_comfortable_density(snap_compare) -> None:
+    app = QueueWatch(replay_sources(), density="comfortable")
+    assert snap_compare(app, terminal_size=SIZES["wide"], run_before=settled)
