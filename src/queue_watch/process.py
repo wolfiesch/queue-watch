@@ -29,10 +29,10 @@ def over_ssh(host: str, argv: list[str], cwd: str | None = None) -> list[str]:
     return ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", host, "--", command]
 
 
-async def run_json(
+async def capture(
     argv: list[str], *, stdin: str | None = None, timeout: float = 25, cwd: str | None = None
-) -> Any:
-    """Run ``argv`` and parse stdout as JSON; a nonzero exit raises RuntimeError.
+) -> tuple[int, bytes, bytes]:
+    """Run ``argv`` and return ``(returncode, stdout, stderr)``.
 
     The command gets its own process group so a timeout also stops children that
     inherited its output pipes; otherwise they would hold the read open.
@@ -56,9 +56,21 @@ async def run_json(
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(process.communicate(), 2)
         raise
-    if process.returncode:
-        message = stderr.decode(errors="replace").strip()[-1200:]
-        raise RuntimeError(message or f"{argv[0]} exited {process.returncode}")
+    return process.returncode, stdout, stderr
+
+
+def failure(argv: list[str], returncode: int, stderr: bytes) -> RuntimeError:
+    message = stderr.decode(errors="replace").strip()[-1200:]
+    return RuntimeError(message or f"{argv[0]} exited {returncode}")
+
+
+async def run_json(
+    argv: list[str], *, stdin: str | None = None, timeout: float = 25, cwd: str | None = None
+) -> Any:
+    """Run ``argv`` and parse stdout as JSON; a nonzero exit raises RuntimeError."""
+    returncode, stdout, stderr = await capture(argv, stdin=stdin, timeout=timeout, cwd=cwd)
+    if returncode:
+        raise failure(argv, returncode, stderr)
     return json.loads(stdout)
 
 

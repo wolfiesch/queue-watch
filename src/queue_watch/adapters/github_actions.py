@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from datetime import UTC, datetime
 
@@ -28,6 +29,7 @@ STATES = {
     "stale": "neutral",
 }
 PAGE = 100
+ETAGS = 200  # cached responses kept for revalidation: the run lists plus recent job lists
 
 
 def state_of(item: dict) -> tuple[str, str]:
@@ -44,6 +46,39 @@ class GitHubActions(Adapter):
         if not re.fullmatch(r"[\w.-]+/[\w.-]+", repo):
             raise ValueError(f"repo must be owner/repo, got {repo!r}")
         self.repo = repo
+        self.etags: dict[str, tuple[str, object]] = {}
+
+    async def get(self, endpoint: str) -> tuple[object, bool]:
+        """GET one page, sending back the last ETag; returns ``(body, more_pages)``.
+
+        GitHub does not count a 304 against the rate limit, so a list that has not
+        changed since the last poll costs nothing. Only single-page responses are
+        cached: a later page can change while the first page's ETag stays the same.
+        """
+        argv = ["gh", "api", "--include", endpoint]
+        cached = self.etags.get(endpoint)
+        if cached:
+            argv += ["--header", f"If-None-Match: {cached[0]}"]
+        returncode, stdout, stderr = await process.capture(argv)
+        head, _, body = stdout.decode(errors="replace").replace("\r\n", "\n").partition("\n\n")
+        status, *lines = head.split("\n")
+        if cached and status.split()[1:2] == ["304"]:
+            return cached[1], False
+        if returncode:
+            raise process.failure(argv, returncode, stderr)
+        headers = {}
+        for line in lines:
+            name, sep, value = line.partition(":")
+            if sep:
+                headers[name.strip().lower()] = value.strip()
+        data = json.loads(body)
+        more = 'rel="next"' in headers.get("link", "")
+        self.etags.pop(endpoint, None)
+        if headers.get("etag") and not more:
+            self.etags[endpoint] = (headers["etag"], data)
+            while len(self.etags) > ETAGS:
+                self.etags.pop(next(iter(self.etags)))
+        return data, more
 
     async def snapshot(self) -> dict:
         # Fetch each active state separately: an old queued run must not disappear
@@ -52,7 +87,8 @@ class GitHubActions(Adapter):
             endpoint = f"repos/{self.repo}/actions/runs?per_page={PAGE}"
             if status:
                 endpoint += "&status=" + status
-            return await process.run_json(["gh", "api", endpoint])
+            page, _ = await self.get(endpoint)
+            return page
 
         statuses = (*ACTIVE_STATUSES, None)
         pages = await asyncio.gather(*(fetch(status) for status in statuses))
@@ -113,16 +149,12 @@ class GitHubActions(Adapter):
         }
 
     async def children(self, record: dict) -> list[dict]:
-        # Paginate so large platform matrices are not silently truncated.
-        pages = await process.run_json(
-            [
-                "gh",
-                "api",
-                "--paginate",
-                "--slurp",
-                f"repos/{self.repo}/actions/runs/{int(record['id'])}/jobs?per_page={PAGE}",
-            ]
-        )
+        endpoint = f"repos/{self.repo}/actions/runs/{int(record['id'])}/jobs?per_page={PAGE}"
+        first, more = await self.get(endpoint)
+        pages = [first]
+        if more:
+            # Paginate so large platform matrices are not silently truncated.
+            pages = await process.run_json(["gh", "api", "--paginate", "--slurp", endpoint])
         jobs = []
         for job in (job for page in pages for job in page["jobs"]):
             state, raw = state_of(job)
