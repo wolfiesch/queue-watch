@@ -22,15 +22,24 @@ class Fake(Adapter):
     name = "fake"
     label = "Fake"
 
-    def __init__(self, records: list[dict]) -> None:
-        self.records = records
+    def __init__(self, records: list[dict], views: list[dict] | None = None) -> None:
+        self.records, self.views = records, views or []
 
     async def snapshot(self) -> dict:
         return {
             "schema": "queue-watch.snapshot/1",
             "observed_at": iso(0),
             "records": self.records,
+            "views": self.views,
         }
+
+
+class Down(Adapter):
+    name = "down"
+    label = "Down"
+
+    async def snapshot(self) -> dict:
+        raise RuntimeError("connection refused")
 
 
 CI = [
@@ -104,6 +113,72 @@ async def loaded(pilot) -> None:
     raise AssertionError("sources never answered")
 
 
+async def answered(pilot) -> None:
+    """Wait until every source has answered or failed and the view has caught up."""
+    app = pilot.app
+    for _ in range(100):
+        await pilot.pause(0.02)
+        if all(s in app.updated or s in app.errors for s in app.sources):
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            return
+    raise AssertionError("sources never settled")
+
+
+def test_empty_states_say_why_nothing_is_shown() -> None:
+    note = {"id": "n1", "kind": "note", "state": "success", "title": "No branch here"}
+    merged = {
+        "id": "a1",
+        "kind": "attempt",
+        "state": "success",
+        "title": "#9",
+        "finished_at": iso(12),
+    }
+    queue_view = {"kind": "queue_entry", "label": "Queue", "columns": [{"key": "title"}]}
+    cases = [
+        ([Source("a", "A", 60, Down()), Source("b", "B", 60, Down())], "No source answered."),
+        ([Source("a", "A", 60, Fake([]))], "Every source answered with no records."),
+        ([Source("a", "A", 60, Fake([note]))], "None of the 1 record names a branch"),
+        ([Source("mq", "MQ", 60, Fake([merged], [queue_view]))], "nothing waiting"),
+    ]
+
+    async def run(given: list[Source], expected: str) -> None:
+        app = QueueWatch(given)
+        async with app.run_test(size=(160, 45)) as pilot:
+            await answered(pilot)
+            if "mq" in app.strips:
+                strip = app.strips["mq"]
+                title = str(strip.query_one(".queue-title").render())
+                assert title == "MQ  nothing waiting · last merge 12m ago"
+                # The attempt has no start time or duration but still counts as a merge.
+                assert str(strip.query_one(".rate").render()) == "✓ 1 merged/hr"
+                # With no changes the app opens the first source tab: the empty queue.
+                assert app.query_one("#tabs", TabbedContent).active != "changes-tab"
+                head = str(app.query_one("#insp-head").render())
+                assert head == "MQ has sent no rows for this view yet."
+                return
+            rows = app.query_one("#rows", OptionList)
+            assert str(rows.get_option_at_index(0).prompt).startswith(expected)
+
+    for given, expected in cases:
+        asyncio.run(run(given, expected))
+
+
+def test_search_with_no_hits_names_the_query() -> None:
+    async def run() -> None:
+        app = QueueWatch(sources())
+        async with app.run_test(size=(120, 40)) as pilot:
+            await loaded(pilot)
+            await pilot.press("slash", *"zzz")
+            await pilot.pause()
+            rows = app.query_one("#rows", OptionList)
+            assert (
+                str(rows.get_option_at_index(0).prompt) == 'No changes match "zzz". esc to clear.'
+            )
+
+    asyncio.run(run())
+
+
 def test_changes_correlate_across_sources_and_chips_select_them() -> None:
     async def run() -> None:
         app = QueueWatch(sources())
@@ -153,13 +228,53 @@ def test_search_filters_changes_and_source_tables() -> None:
     asyncio.run(run())
 
 
+def test_queue_depth_is_sampled_once_per_fetch() -> None:
+    async def run() -> None:
+        app = QueueWatch(sources())
+        async with app.run_test(size=(160, 45)) as pilot:
+            await loaded(pilot)
+            strip = app.strips["mq"]
+            assert list(strip.depth) == [len(strip.entries)]
+            assert not strip.has_class("-depth")
+            # Redraws such as a search keystroke are not fetches and add no sample.
+            await pilot.press("slash", "x", "escape")
+            await pilot.pause()
+            assert len(strip.depth) == 1
+            await pilot.press("r")
+            await loaded(pilot)
+            assert len(strip.depth) == 2 and strip.has_class("-depth")
+
+    asyncio.run(run())
+
+
 def test_change_rows_exactly_fill_the_table_at_every_width() -> None:
     # Wider rows wrap in the OptionList; narrower ones leave the AGE column unaligned.
-    for queue in (True, False):
-        for width in range(35, 200):
-            cols = change_columns(width, queue)
-            assert sum(c.width for c in cols) + len(cols) - 1 == width, (width, queue)
-            assert cols[-1].key == "age"
+    for comfortable in (False, True):
+        for queue in (True, False):
+            for width in range(35, 200):
+                cols = change_columns(width, queue, comfortable)
+                assert sum(c.width for c in cols) + len(cols) - 1 == width, (width, queue)
+                assert cols[-1].key == "age"
+                if comfortable:
+                    assert not {"pr", "title", "owner"} & {c.key for c in cols}
+
+
+def test_density_toggle_moves_title_owner_and_pr_to_a_second_line() -> None:
+    async def run() -> None:
+        app = QueueWatch(sources(), density="comfortable")
+        async with app.run_test(size=(160, 45)) as pilot:
+            await loaded(pilot)
+            rows = app.query_one("#rows", OptionList)
+            prompt = rows.get_option("c:fix-a").prompt
+            first, second = str(prompt).split("\n")
+            assert "#12" not in first and "TITLE" not in str(app.query_one("#colhead").render())
+            assert second.strip() == "Fix A · #12"
+            assert len(second) == len(first)
+            await pilot.press("d")
+            assert "\n" not in str(rows.get_option("c:fix-a").prompt)
+            assert "TITLE" in str(app.query_one("#colhead").render())
+
+    asyncio.run(run())
 
 
 def test_markup_in_adapter_strings_is_shown_literally() -> None:

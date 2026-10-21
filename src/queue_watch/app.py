@@ -85,10 +85,13 @@ Screen { background: $surface; }
 .queue-head { height: 1; }
 .queue-head .queue-title { width: auto; }
 .queue-head .queue-eta { width: 1fr; min-width: 18; padding-left: 2; }
-.queue-head .trend-label { width: auto; margin-left: 2; }
-.-narrow .queue-head .trend-label { display: none; }
-.queue-head .trend { margin: 0 0 0 1; }
-.queue-head .trend-stats { width: auto; }
+.queue-head .spark-label { width: auto; margin-left: 2; }
+.queue-head .spark { margin: 0 1; }
+.queue-head .rate { width: auto; margin-left: 2; }
+.queue-head .took-stats { width: auto; }
+.queue-head .depth, .queue-head .took { display: none; }
+.queue.-depth .queue-head .depth, .queue.-took .queue-head .took { display: block; }
+.-narrow .queue .queue-head .spark, .-narrow .queue .queue-head .depth { display: none; }
 Sparkline > .sparkline--max-color { color: $error; }
 Sparkline > .sparkline--min-color { color: $success; }
 .chain { height: auto; }
@@ -234,15 +237,24 @@ class QueueWatch(App):
         Binding("escape", "clear", "Clear", show=False),
         Binding("o", "open", "Open"),
         Binding("c", "copy_sha", "Copy SHA"),
+        Binding("d", "density", "Density"),
         Binding("1", "tab(0)", "Changes"),
         *(Binding(str(n), f"tab({n - 1})", show=False) for n in range(2, 10)),
     ]
 
-    def __init__(self, sources: list[Source], *, theme: str = "tokyo-night", ascii: bool = False):
+    def __init__(
+        self,
+        sources: list[Source],
+        *,
+        theme: str = "tokyo-night",
+        ascii: bool = False,
+        density: str = "compact",
+    ):
         super().__init__()
         self.sources = {source.id: source for source in sources}
         self.order = list(self.sources)
         self.initial_theme = theme
+        self.initial_density = density
         if ascii:
             widgets.use_ascii()
         self.set_class(ascii, "-ascii")
@@ -271,7 +283,7 @@ class QueueWatch(App):
         yield Input(placeholder="Search changes and records (esc to clear)", id="search")
         with Horizontal(id="body"):
             with TabbedContent(id="tabs", initial=CHANGES), TabPane("Changes", id=CHANGES):
-                yield ChangeTable()
+                yield ChangeTable(self.initial_density)
             yield Inspector()
         yield Static(id="notices")
         yield Footer()
@@ -308,6 +320,8 @@ class QueueWatch(App):
             self.errors.pop(source_id, None)
             await self.ensure_panes(source_id)
             await self.ensure_strip(source_id)
+            if source_id in self.strips:
+                self.strips[source_id].sample(snapshot["records"])
         except FETCH_ERRORS as error:
             self.errors[source_id] = clean(str(error) or type(error).__name__)
         finally:
@@ -401,9 +415,7 @@ class QueueWatch(App):
         ordered = [change for *_, members in grouped(visible) for change in members]
         if self.selected not in {change.key for change in ordered}:
             self.selected = ordered[0].key if ordered else None
-        empty = "No changes match the search." if self.query_text() else "No changes yet."
-        if not snapshots:
-            empty = "Waiting for sources..."
+        empty = self.empty_changes(snapshots)
         queue = any(change.entries or change.attempts for change in changes)
         self.query_one(ChangeTable).show(visible, queue, self.selected, empty)
         tabs = self.query_one("#tabs", TabbedContent)
@@ -416,6 +428,32 @@ class QueueWatch(App):
             await strip.show(records, mine)
         self.rebuild_tables()
         await self.show_selection()
+
+    def empty_changes(self, snapshots: dict[str, dict]) -> str:
+        """Why the Changes tab has no rows, in the user's terms."""
+        if self.query_text():
+            return (
+                f'No changes match "{clean(self.query_one("#search", Input).value)}". esc to clear.'
+            )
+        pending = [
+            clean(self.sources[s].label)
+            for s in self.order
+            if s not in self.updated and s not in self.errors
+        ]
+        if not snapshots:
+            if pending:
+                return f"Waiting for {', '.join(pending)}..."
+            return "No source answered. Their errors are listed at the bottom."
+        if pending:
+            return f"No changes yet. Still waiting for {', '.join(pending)}..."
+        records = sum(len(snapshot["records"]) for snapshot in snapshots.values())
+        if not records:
+            return "Every source answered with no records."
+        noun = "record names" if records == 1 else "records name"
+        return (
+            f"None of the {records} {noun} a branch or commit on a run, queue entry, or attempt. "
+            "The source tabs list them."
+        )
 
     def rebuild_tables(self) -> None:
         self.rendering = True
@@ -521,9 +559,12 @@ class QueueWatch(App):
             record = self.current_record(name)
             target = ("record", name, record["id"] if record else None)
             if record is None:
-                await inspector.show(
-                    dim("No rows match this view."), [], url=False, sha=False, reset=True
-                )
+                if self.query_text():
+                    text = "No rows match the search. esc to clear."
+                else:
+                    label = self.sources[source_id].label
+                    text = f"{label} has sent no rows for this view yet."
+                await inspector.show(dim(clean(text)), [], url=False, sha=False, reset=True)
                 self.shown = target
                 return
             head, sections, lazy = self.record_view(source_id, record)
@@ -774,6 +815,11 @@ class QueueWatch(App):
     def focus_view(self) -> None:
         name = self.active_pane()
         self.query_one(f"#{name}" if name else "#rows").focus()
+
+    def action_density(self) -> None:
+        table = self.query_one(ChangeTable)
+        table.density = "compact" if table.density == "comfortable" else "comfortable"
+        table.rebuild()
 
     def action_refresh(self) -> None:
         for source_id in self.sources:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import statistics
 import time
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -174,12 +175,17 @@ def short_age(seconds: float | None) -> str:
     return f"{seconds}s"
 
 
+def now() -> float:
+    """Wall-clock epoch seconds; the one place ages read the clock (tests replace it)."""
+    return time.time()
+
+
 def ago(value: str | float | None) -> float | None:
     """Seconds since an ISO timestamp or epoch seconds."""
     if isinstance(value, (int, float)):
-        return time.time() - value if value else None
+        return now() - value if value else None
     try:
-        return time.time() - datetime.fromisoformat(value).timestamp()
+        return now() - datetime.fromisoformat(value).timestamp()
     except (TypeError, ValueError):
         return None
 
@@ -200,7 +206,7 @@ def elapsed(record: dict) -> float | None:
     if not start:
         return None
     if record["state"] == "running":
-        return time.time() - start
+        return now() - start
     end = stamp(record, "finished_at")
     return end - start if end >= start else None
 
@@ -370,25 +376,40 @@ class QueueChip(Static):
         self.post_message(ChipClicked(self.source, self.record["id"]))
 
 
+DEPTH_SAMPLES = 120  # one per fetch: half an hour at the default 15 s interval
+SPARK_CELLS = 20
+
+
 class QueueStrip(Vertical):
-    """Header (count, ETA, attempt trend) over a FIFO chain of chips for one source."""
+    """Header (count, ETA, depth and attempt trends) over a FIFO chain of chips for one source."""
 
     def __init__(self, source: str, label: str) -> None:
         super().__init__(classes="queue")
         self.source, self.label = source, label
         self.entries: list[dict] = []
-        self.attempts: list[dict] = []
+        self.attempts: list[dict] = []  # with a duration: the "took" trend
+        self.merges: list[float] = []  # finish times of every successful attempt
+        self.history = False
         self.by_record: dict[str, Change] = {}
         self.built: tuple | None = None
+        # Queue length after each fetch this session; sources keep no history of it.
+        self.depth: deque[int] = deque(maxlen=DEPTH_SAMPLES)
 
     def compose(self) -> ComposeResult:
         with Horizontal(classes="queue-head"):
             yield Static(classes="queue-title")
             yield Static(classes="queue-eta")
-            yield Static(dim("took "), classes="trend-label")
-            yield Sparkline([], classes="trend")
-            yield Static(classes="trend-stats")
+            yield Static(dim("depth"), classes="depth spark-label")
+            yield Sparkline([], classes="depth spark")
+            yield Static(classes="rate")
+            yield Static(dim("took"), classes="took spark-label")
+            yield Sparkline([], classes="took spark")
+            yield Static(classes="took took-stats")
         yield Horizontal(classes="chain")
+
+    def sample(self, records: list[dict]) -> None:
+        """Record the queue length of one fresh snapshot."""
+        self.depth.append(sum(r["kind"] == "queue_entry" for r in records))
 
     async def show(self, records: list[dict], by_record: dict[str, Change]) -> None:
         self.entries = chain_order([r for r in records if r["kind"] == "queue_entry"])
@@ -396,30 +417,49 @@ class QueueStrip(Vertical):
             (r for r in records if r["kind"] == "attempt" and elapsed(r) is not None),
             key=lambda r: stamp(r, "finished_at", "started_at"),
         )
+        # Merge counts need only a finish time; a log may omit start times and durations.
+        finished = [r for r in records if r["kind"] == "attempt" and stamp(r, "finished_at")]
+        self.history = bool(finished)
+        self.merges = [stamp(r, "finished_at") for r in finished if r["state"] == "success"]
         self.by_record = by_record
         self.head()
         await self.chain()
 
     def head(self) -> None:
         waiting = len(self.entries)
-        title = Content.assemble(
-            (clean(self.label).upper(), "b"),
-            muted(f"  {waiting} waiting" if waiting else "  empty"),
+        status = f"  {waiting} waiting"
+        if not waiting:
+            status = "  nothing waiting"
+            if self.merges:
+                last = short_age(now() - max(self.merges))
+                status += f" {SYMBOLS.dot} last merge {last} ago"
+        self.query_one(".queue-title", Static).update(
+            Content.assemble((clean(self.label).upper(), "b"), muted(status))
         )
-        self.query_one(".queue-title", Static).update(title)
         clears = max((eta_of(e) or 0 for e in self.entries), default=0)
         self.query_one(".queue-eta", Static).update(
             Content.assemble(muted("clears in "), (eta_text(clears), "b")) if clears else ""
         )
+        # Visibility is by class so that the narrow layout's CSS can still hide sparklines.
+        self.set_class(len(self.depth) > 1, "-depth")
+        if len(self.depth) > 1:
+            depth = self.query_one(".depth.spark", Sparkline)
+            depth.data = list(self.depth)
+            depth.styles.width = min(len(self.depth), SPARK_CELLS)
+        merged = sum(now() - finished <= 3600 for finished in self.merges)
+        self.query_one(".rate", Static).update(
+            Content.assemble(glyph("success"), muted(f" {merged} merged/hr"))
+            if self.history
+            else ""
+        )
         took = [elapsed(a) for a in self.attempts[-30:]]
         failed = sum(a["state"] == "failure" for a in self.attempts[-30:])
-        trend = self.query_one(".trend", Sparkline)
-        for widget in (self.query_one(".trend-label"), trend, self.query_one(".trend-stats")):
-            widget.display = len(took) > 1
+        self.set_class(len(took) > 1, "-took")
         if len(took) > 1:
+            trend = self.query_one(".took.spark", Sparkline)
             trend.data = took
-            trend.styles.width = min(2 * len(took), 40)
-            self.query_one(".trend-stats", Static).update(
+            trend.styles.width = min(len(took), SPARK_CELLS)
+            self.query_one(".took-stats", Static).update(
                 Content.assemble(
                     muted(
                         f" median {human_seconds(statistics.median(took))} {SYMBOLS.dot} "
@@ -476,15 +516,19 @@ class Column:
     align: str = "left"
 
 
-def change_columns(width: int, queue: bool) -> list[Column]:
-    """Columns for a table ``width`` cells wide; narrow tables keep the essentials."""
-    wide = width >= 96
-    cols = [Column("glyph", "", 1), Column("ref", "CHANGE", 18 if wide else 16)]
+def change_columns(width: int, queue: bool, comfortable: bool = False) -> list[Column]:
+    """Columns for a table ``width`` cells wide; narrow tables keep the essentials.
+
+    Comfortable rows carry title, owner and PR on a second line, so those columns go.
+    """
+    roomy = width >= 96
+    wide = roomy and not comfortable
+    cols = [Column("glyph", "", 1), Column("ref", "CHANGE", 18 if roomy else 16)]
     if wide:
         cols += [Column("pr", "PR", 6), Column("title", "TITLE", 0), Column("owner", "OWNER", 10)]
     cols.append(Column("ci", "CI", 20 if queue else 26))
     if queue:
-        cols.append(Column("queue", "QUEUE", 24 if wide else 16))
+        cols.append(Column("queue", "QUEUE", 24 if roomy else 16))
     cols.append(Column("age", "AGE", 4, "right"))
     flex = width - sum(c.width for c in cols) - (len(cols) - 1)
     if not wide or flex < 12:
@@ -528,16 +572,33 @@ def change_cell(col: Column, change: Change, compact: bool) -> Content:
     return Content("")
 
 
+def change_detail(change: Change, width: int) -> Content:
+    """Second line of a comfortable row: title, owner and PR under the change name."""
+    parts = [
+        part
+        for part in (
+            clean(change.title or ""),
+            clean(change.owner or ""),
+            f"#{change.pr}" if change.pr else "",
+        )
+        if part
+    ]
+    indent = 2  # under the change name, past the glyph column
+    detail = dim(f" {SYMBOLS.dot} ".join(parts) or SYMBOLS.dash)
+    return Content.assemble(" " * indent, fit(detail, width - indent, "left"))
+
+
 class ChangeTable(Vertical):
     """Header line over an OptionList: group rows are disabled, so the cursor skips them."""
 
-    def __init__(self) -> None:
+    def __init__(self, density: str = "compact") -> None:
         super().__init__(id="changes")
         self.changes: list[Change] = []
         self.queue = False
         self.selected: str | None = None
         self.width = 0
         self.empty = "Waiting for sources..."
+        self.density = density
 
     def compose(self) -> ComposeResult:
         yield Static(id="colhead")
@@ -557,7 +618,8 @@ class ChangeTable(Vertical):
     def rebuild(self) -> None:
         if not self.width:
             return
-        cols = change_columns(self.width, self.queue)
+        comfortable = self.density == "comfortable"
+        cols = change_columns(self.width, self.queue, comfortable)
         compact = self.width < 96
         head = Content(" ").join(
             fit(Content.assemble(muted(c.label)), c.width, c.align) for c in cols
@@ -581,6 +643,8 @@ class ChangeTable(Vertical):
                 row = Content(" ").join(
                     fit(change_cell(c, change, compact), c.width, c.align) for c in cols
                 )
+                if comfortable:
+                    row = Content("\n").join([row, change_detail(change, self.width)])
                 options.append(Option(row, id=f"c:{change.key}"))
         if not options:
             options.append(Option(dim(self.empty), id="g:empty", disabled=True))
