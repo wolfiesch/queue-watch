@@ -367,3 +367,42 @@ def test_markup_in_adapter_strings_is_shown_literally() -> None:
             assert "[/oops]" in str(app.query_one("#tabs").get_tab("pane0-tab").label)
 
     asyncio.run(run())
+
+
+def test_queue_head_sizes_sparklines_so_counts_never_clip() -> None:
+    attempts = [
+        {
+            "id": f"a{i}",
+            "kind": "attempt",
+            "state": "failure" if i % 3 == 0 else "success",
+            "title": f"#{i} Change",
+            "ref": f"change-{i}",
+            "started_at": iso(60 - i),
+            "finished_at": iso(59.5 - i - (i % 4) / 4),  # 30 to 75 seconds
+        }
+        for i in range(30)
+    ]
+    queue_view = {"kind": "queue_entry", "label": "Queue", "columns": [{"key": "title"}]}
+
+    async def run(records: list[dict], width: int) -> list[int]:
+        app = QueueWatch([Source("mq", "MQ", 60, Fake(records, [queue_view]))])
+        async with app.run_test(size=(width, 40)) as pilot:
+            await loaded(pilot)
+            strip = app.strips["mq"]
+            strip.depth.extend([3, 5, 2, 8] * 30)  # a long session's depth history
+            strip.head()
+            await pilot.pause()
+            head = strip.query_one(".queue-head")
+            stats = strip.query_one(".took-stats", Static)
+            text = stats.render()
+            assert str(text).endswith("✗ 10/30")
+            assert stats.region.width == text.cell_length
+            assert stats.region.right <= head.region.right
+            sparks = [s.region.width for s in head.query(".spark") if s.display]
+            assert all(4 <= cells <= 20 for cells in sparks)
+            return sparks
+
+    # Queued and empty queues: the empty one's longer title leaves less room.
+    for records in (QUEUE + attempts, attempts):
+        assert asyncio.run(run(records, 120))  # at least one trend still fits
+        assert asyncio.run(run(records, 200)) == [20, 20]
