@@ -62,6 +62,8 @@ from .widgets import (
 )
 
 FETCH_ERRORS = (OSError, RuntimeError, ValueError, KeyError, TypeError)
+# State columns grow to fit adapter words such as "awaiting checks", up to this many cells.
+STATE_WIDTH_MAX = 24
 CHANGES = "changes-tab"
 CHILD_TTL = 15
 BAR = 8  # job duration bar cells; a job line fits the narrowest inspector
@@ -529,8 +531,15 @@ class QueueWatch(App):
                 old_key = table.coordinate_to_cell_key(table.cursor_coordinate).row_key.value
             scroll_x, scroll_y = table.scroll_x, table.scroll_y
             table.clear()
-            for record in rows:
-                table.add_row(*(cell(self, record, c) for c in view["columns"]), key=record["id"])
+            rendered = [[cell(self, record, c) for c in view["columns"]] for record in rows]
+            for index, column in enumerate(view["columns"]):
+                if column.get("format") == "state" and rendered:
+                    widest = max(row[index].cell_len for row in rendered)
+                    shown = table.ordered_columns[index]
+                    # Grow only, so a live table never jitters as states come and go.
+                    shown.width = max(shown.width, min(widest, STATE_WIDTH_MAX))
+            for record, cells in zip(rows, rendered, strict=True):
+                table.add_row(*cells, key=record["id"])
             keys = [r["id"] for r in rows]
             if keys:
                 table.move_cursor(row=keys.index(old_key) if old_key in keys else 0, animate=False)

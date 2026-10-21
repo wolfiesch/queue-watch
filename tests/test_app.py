@@ -6,7 +6,7 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 
 from textual.content import Content
-from textual.widgets import OptionList, Static, TabbedContent
+from textual.widgets import DataTable, OptionList, Static, TabbedContent
 
 from queue_watch.adapters import Adapter
 from queue_watch.app import QueueWatch
@@ -406,3 +406,36 @@ def test_queue_head_sizes_sparklines_so_counts_never_clip() -> None:
     for records in (QUEUE + attempts, attempts):
         assert asyncio.run(run(records, 120))  # at least one trend still fits
         assert asyncio.run(run(records, 200)) == [20, 20]
+
+
+def test_state_column_fits_long_adapter_states_and_never_shrinks() -> None:
+    waiting = {
+        "id": "q3",
+        "kind": "queue_entry",
+        "state": "queued",
+        "raw_state": "AWAITING_CHECKS",
+        "title": "#14 Slow checks",
+        "ref": "slow",
+        "position": 1,
+        "created_at": iso(1),
+    }
+    records = [waiting]
+
+    async def run() -> None:
+        app = QueueWatch([Source("mq", "MQ", 60, Fake(records))])
+        async with app.run_test(size=(160, 40)) as pilot:
+            await loaded(pilot)
+            pane = next(iter(app.panes))
+            app.query_one("#tabs", TabbedContent).active = f"{pane}-tab"
+            await pilot.pause()
+            table = app.query_one(f"#{pane}", DataTable)
+            # Line 0 is the header; the declared 12-cell column once cut this to "AWAITING C".
+            assert "AWAITING CHECKS" in table.render_line(1).text
+            records[0] = {**waiting, "raw_state": "QUEUED"}
+            await pilot.press("r")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            assert "QUEUED" in table.render_line(1).text
+            assert table.ordered_columns[1].width == len("◌ AWAITING CHECKS")
+
+    asyncio.run(run())
