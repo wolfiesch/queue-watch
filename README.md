@@ -2,10 +2,13 @@
 
 Read-only terminal dashboard for CI runs and merge queues. It joins records from every source into one row per change, so a branch's CI runs and its merge-queue entry read together, and draws each merge queue as a chain of chips in queue order. queue-watch never reruns, cancels, merges or takes a lock.
 
+![queue-watch showing a merge queue of four changes, the Changes table grouped by state, and the inspector for a failed change](https://raw.githubusercontent.com/wolfiesch/queue-watch/main/docs/screenshot.png)
+
 ## Install
 
 ```sh
-uv tool install git+https://github.com/wolfiesch/queue-watch
+uv tool install queue-watch     # or: pipx install queue-watch
+uvx queue-watch                 # run once without installing
 ```
 
 Requires Python 3.11+. The GitHub adapters use an authenticated [GitHub CLI](https://cli.github.com/) (`gh auth login`).
@@ -95,6 +98,16 @@ The program must exit zero and print one snapshot (below) on stdout within `time
 ## Snapshot contract
 
 Every adapter emits the same versioned snapshot (`queue-watch.snapshot/1`): a list of records with `id`, `kind`, `state` and `title`, plus optional `ref`, `sha`, `owner`, `position`, timestamps, `url`, `fields` and `children`. `state` is one of `queued`, `running`, `blocked`, `success`, `failure`, `cancelled`, `neutral` or `unknown`; the adapter's own term is kept in `raw_state`. Records that share a `ref` or `sha` describe the same change across sources. [`model.py`](src/queue_watch/model.py) defines and validates the contract, and `--once` prints it.
+
+## Development
+
+```sh
+uv sync
+uv run pytest -q                        # includes SVG snapshot tests
+uv run pytest -q --snapshot-update      # after an intended layout change
+```
+
+`docs/screenshot.png` is the wide layout snapshot rendered in a browser. To release, bump `__version__` in `src/queue_watch/__init__.py`, merge, and push a matching `vX.Y.Z` tag; the release workflow tests, builds, publishes to PyPI with trusted publishing, and creates the GitHub release.
 
 ## License
 

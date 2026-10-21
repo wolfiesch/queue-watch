@@ -28,6 +28,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from . import __version__
 from .config import ConfigError, Source, load
 from .discovery import CONFIG_NAME, detect, github_sources, profile_path, repo_config, trust
 
@@ -80,6 +81,7 @@ def main(argv: list[str] | None = None) -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    parser.add_argument("--version", action="version", version=f"queue-watch {__version__}")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--repo", help="GitHub owner/repo: Actions plus any merge queue")
     group.add_argument("--config", type=Path, help="TOML file with [[source]] tables")
