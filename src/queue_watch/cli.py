@@ -88,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument("--profile", help="NAME for ~/.config/queue-watch/NAME.toml")
     parser.add_argument("--once", action="store_true", help="print JSON once; no TUI")
     parser.add_argument(
-        "--theme", default="tokyo-night", help="Textual theme (default tokyo-night)"
+        "--theme", default="queue-watch", help="Textual theme (default queue-watch: black)"
     )
     parser.add_argument("--ascii", action="store_true", help="ASCII glyphs and borders only")
     parser.add_argument(
