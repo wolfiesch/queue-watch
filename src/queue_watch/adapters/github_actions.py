@@ -76,7 +76,7 @@ class GitHubActions(Adapter):
         return {
             "schema": SCHEMA,
             "observed_at": datetime.now(UTC).isoformat(),
-            "records": [self.record(run) for run in ordered],
+            "records": [{**self.record(run), "repo": self.repo} for run in ordered],
             "views": [
                 {
                     "kind": "run",

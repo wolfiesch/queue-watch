@@ -13,11 +13,12 @@ A snapshot is one observation of one source:
 
 Record fields: ``id``, ``kind``, ``state`` and ``title`` are required. ``state`` is
 one of STATES; adapters keep their own vocabulary in ``raw_state``. ``ref`` and
-``sha`` identify the change so records from different sources can be correlated.
-Optional: ``raw_state``, ``subtitle``, ``ref``, ``sha``, ``owner``, ``position``
-(int), ``created_at``, ``updated_at``, ``started_at``, ``finished_at`` (ISO 8601),
-``url``, ``fields`` (JSON object for the inspector) and ``children`` (records,
-for example jobs and steps).
+``sha`` identify the change so records from different sources can be correlated;
+``repo`` ("owner/name") keeps equal refs from different repositories apart.
+Optional: ``raw_state``, ``subtitle``, ``ref``, ``sha``, ``repo``, ``owner``,
+``position`` (int), ``created_at``, ``updated_at``, ``started_at``, ``finished_at``
+(ISO 8601), ``url``, ``fields`` (JSON object for the inspector) and ``children``
+(records, for example jobs and steps).
 
 View: ``{"kind", "label", "columns": [{"key", "label", "width", "format"}]}``.
 A column key is a record field name or ``fields.<name>``; FORMATS lists formats.
@@ -43,7 +44,7 @@ ACTIVE = frozenset({"queued", "running", "blocked"})
 ATTENTION = frozenset({"failure", "blocked"})
 FORMATS = ("text", "state", "clock", "age", "seconds", "duration", "sha")
 TIME_FIELDS = ("created_at", "updated_at", "started_at", "finished_at")
-TEXT_FIELDS = ("raw_state", "subtitle", "ref", "sha", "owner", "url")
+TEXT_FIELDS = ("raw_state", "subtitle", "ref", "sha", "repo", "owner", "url")
 
 DEFAULT_VIEWS: dict[str, dict] = {
     "run": {

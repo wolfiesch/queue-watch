@@ -636,7 +636,8 @@ class QueueWatch(App):
         return bool(record.get("children")) or type(adapter).children is not Adapter.children
 
     def change_view(self, change: Change):
-        meta = [clean(change.ref or change.key)]
+        meta = [clean(change.repo)] if change.repo else []
+        meta.append(clean(change.ref or change.sha or change.key))
         if change.sha:
             meta.append(clean(change.sha)[:7])
         if change.pr:

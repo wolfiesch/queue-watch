@@ -81,3 +81,25 @@ def test_queue_state_outranks_green_ci_and_finished_changes_fall_to_done() -> No
         "queued": ["first"],
         "done": ["gone", "merged"],
     }
+
+
+def test_same_branch_in_different_repositories_stays_apart() -> None:
+    api = snap(
+        record("r1", "run", "success", ref="main", sha="a1", repo="acme/api"),
+        record("r2", "run", "failure", ref="feat/x", sha="a2", repo="acme/api"),
+    )
+    web = snap(record("r3", "run", "failure", ref="main", sha="b1", repo="acme/web"))
+    # A source without repositories (a command adapter) cannot be placed in either.
+    local = snap(record("q1", "queue_entry", "queued", ref="main", position=1))
+    changes = correlate({"api": api, "web": web, "local": local})
+    by_key = {change.key: change for change in changes}
+    assert set(by_key) == {"acme/api:main", "acme/api:feat/x", "acme/web:main", "main"}
+    assert by_key["acme/web:main"].state == "failure"
+    assert by_key["acme/api:main"].state == "success"
+    assert (by_key["acme/web:main"].repo, by_key["main"].repo) == ("acme/web", None)
+
+    # With one repository, records without one still join it, and keys stay plain.
+    changes = correlate({"api": snap(api["records"][0]), "local": local})
+    assert [(change.key, change.repo, len(change.entries)) for change in changes] == [
+        ("main", None, 1)
+    ]

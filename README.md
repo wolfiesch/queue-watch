@@ -31,6 +31,7 @@ Requires Python 3.11+. The GitHub adapters use an authenticated [GitHub CLI](htt
 queue-watch                              # inside a GitHub checkout
 queue-watch --repo owner/repo            # Actions plus the merge queue, if any
 queue-watch --profile work               # ~/.config/queue-watch/work.toml
+queue-watch profile add work --repo acme/api --repo acme/web
 queue-watch --config sources.toml        # any combination of sources
 queue-watch --repo owner/repo --once     # one JSON snapshot, no TUI
 queue-watch --demo                       # a simulated repository
@@ -38,7 +39,7 @@ queue-watch --theme nord --ascii         # another Textual theme; ASCII glyphs o
 queue-watch --density comfortable        # title, owner and PR on a second line
 ```
 
-With no flags, queue-watch looks for a `.queue-watch.toml` at the root of the current Git checkout. Without one, it watches the checkout's GitHub repository: Actions runs, plus the merge queue when the default branch has one. `--profile NAME` reads `$XDG_CONFIG_HOME/queue-watch/NAME.toml` (default `~/.config`).
+With no flags, queue-watch looks for a `.queue-watch.toml` at the root of the current Git checkout. Without one, it watches the checkout's GitHub repository: Actions runs, plus the merge queue when the default branch has one. Outside a GitHub checkout it opens the profile named `default`.
 
 The Changes tab groups changes into Needs attention, Running, Queued and Done; every view a source reports also gets its own tab. Done starts folded while any other group has changes; press enter on a group row, or click it, to fold or unfold it. Select a change or a queue chip to see its CI checks, the jobs of the most notable one, its queue position and ETA, and recent history in the inspector.
 
@@ -49,6 +50,19 @@ Each merge queue gets a strip above the tabs: its entries in merge order, when i
 Keyboard: arrows to move, `1` to `9` for tabs, `/` to search (esc to clear), `o` to open the selection in a browser, `c` to copy its SHA, `d` to switch row density, `r` to refresh, `p` to pause, `q` to quit. The mouse works too: click tabs, rows, chips and the inspector buttons, and scroll with the wheel. When a source fails, its last good data stays on screen and its status pill turns stale.
 
 The default `queue-watch` theme draws on a black background and gives each region its own coloured box. Pass `--theme` with any Textual theme name, or pick one live from the command palette (ctrl+p).
+
+### Profiles
+
+A profile is a named list of sources in `$XDG_CONFIG_HOME/queue-watch/NAME.toml` (default `~/.config`), so one dashboard can watch a group of repositories:
+
+```sh
+queue-watch profile add work --repo acme/api --repo acme/web   # creates or extends work.toml
+queue-watch profile list                                       # every profile and its sources
+queue-watch --profile work
+queue-watch profile add default --repo acme/api                # opens outside any checkout
+```
+
+`profile add` writes Actions for each repository, plus its merge queue when the default branch has one, with the repository's name in each label. Repositories already in the profile are left alone, and anything written by hand stays. A profile is ordinary [source config](#sources), so you can add `command` and `flock-queue` sources too. When a dashboard spans several repositories, a branch name such as `main` in two of them is two rows, each labelled with its repository.
 
 ### Repository configs need trust
 
@@ -114,7 +128,7 @@ The program must exit zero and print one snapshot (below) on stdout within `time
 
 ## Snapshot contract
 
-Every adapter emits the same versioned snapshot (`queue-watch.snapshot/1`): a list of records with `id`, `kind`, `state` and `title`, plus optional `ref`, `sha`, `owner`, `position`, timestamps, `url`, `fields` and `children`. `state` is one of `queued`, `running`, `blocked`, `success`, `failure`, `cancelled`, `neutral` or `unknown`; the adapter's own term is kept in `raw_state`. Records that share a `ref` or `sha` describe the same change across sources. [`model.py`](https://github.com/wolfiesch/queue-watch/blob/main/src/queue_watch/model.py) defines and validates the contract, and `--once` prints it.
+Every adapter emits the same versioned snapshot (`queue-watch.snapshot/1`): a list of records with `id`, `kind`, `state` and `title`, plus optional `ref`, `sha`, `repo`, `owner`, `position`, timestamps, `url`, `fields` and `children`. `state` is one of `queued`, `running`, `blocked`, `success`, `failure`, `cancelled`, `neutral` or `unknown`; the adapter's own term is kept in `raw_state`. Records that share a `ref` or `sha` describe the same change across sources. Once records name more than one `repo` (`owner/name`, set by the GitHub adapters), a change also needs the same `repo`, and records without one join only each other; a `command` source watching several repositories should set it. [`model.py`](https://github.com/wolfiesch/queue-watch/blob/main/src/queue_watch/model.py) defines and validates the contract, and `--once` prints it.
 
 ## Development
 

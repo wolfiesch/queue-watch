@@ -82,7 +82,7 @@ class GitHubMergeQueue(Adapter):
                 warnings.append(
                     f"showing first {len(entries['nodes'])} of {entries['totalCount']} entries"
                 )
-            records = [self.record(entry) for entry in entries["nodes"]]
+            records = [{**self.record(entry), "repo": self.repo} for entry in entries["nodes"]]
         return {
             "schema": SCHEMA,
             "observed_at": datetime.now(UTC).isoformat(),

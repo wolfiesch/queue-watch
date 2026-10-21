@@ -565,8 +565,10 @@ def change_cell(col: Column, change: Change, compact: bool) -> Content:
         case "glyph":
             return Content.assemble(glyph(change.state))
         case "ref":
-            name = change.ref or change.key[:7]
-            return Content.assemble((clean(name), "b"))
+            name = clean(change.ref or (change.sha or change.key)[:7])
+            if change.repo:  # several repositories: name the one this change is in
+                return Content.assemble(dim(clean(change.repo.split("/")[-1]) + " "), (name, "b"))
+            return Content.assemble((name, "b"))
         case "pr":
             return dim(f"#{change.pr}" if change.pr else "")
         case "title":

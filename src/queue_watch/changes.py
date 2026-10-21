@@ -1,7 +1,9 @@
 """Changes: records from every source that describe the same branch or commit.
 
 Records correlate by ``ref`` and fall back to ``sha``; records with neither stay
-in their source's own tab. Kinds with a role in a change: ``run`` (CI),
+in their source's own tab. When records name more than one ``repo``, the same ref
+in two repositories is two changes, and records without a ``repo`` form changes of
+their own. Kinds with a role in a change: ``run`` (CI),
 ``queue_entry`` (live merge queue position) and ``attempt`` (a finished merge
 attempt). Other kinds are only shown per source.
 """
@@ -51,6 +53,7 @@ class Change:
     key: str
     ref: str | None = None
     sha: str | None = None
+    repo: str | None = None  # set only when the snapshots span several repositories
     runs: list[Hit] = field(default_factory=list)  # newest first
     entries: list[Hit] = field(default_factory=list)  # queue order
     attempts: list[Hit] = field(default_factory=list)  # newest first
@@ -133,24 +136,34 @@ class Change:
 
 
 def correlate(snapshots: dict[str, dict]) -> list[Change]:
-    """One Change per ref (falling back to sha), in merge order, then most recent."""
-    by_ref: dict[str, Change] = {}
-    by_sha: dict[str, Change] = {}
+    """One Change per repository and ref (falling back to sha), in merge order, then
+    most recent. Repositories only separate changes when more than one appears."""
+    repos = {
+        record["repo"]
+        for snapshot in snapshots.values()
+        for record in snapshot.get("records", [])
+        if record.get("repo")
+    }
+    several = len(repos) > 1
+    by_ref: dict[tuple[str | None, str], Change] = {}
+    by_sha: dict[tuple[str | None, str], Change] = {}
     changes: list[Change] = []
     for source, snapshot in snapshots.items():
         for record in snapshot.get("records", []):
             ref, sha = record.get("ref"), record.get("sha")
             if record["kind"] not in ROLES or not (ref or sha):
                 continue
-            change = (ref and by_ref.get(ref)) or (sha and by_sha.get(sha))
+            repo = record.get("repo") if several else None
+            change = (ref and by_ref.get((repo, ref))) or (sha and by_sha.get((repo, sha)))
             if not change:
-                change = Change(key=ref or sha)
+                name = ref or sha
+                change = Change(key=f"{repo}:{name}" if repo else name, repo=repo)
                 changes.append(change)
             if ref:
-                by_ref.setdefault(ref, change)
+                by_ref.setdefault((repo, ref), change)
                 change.ref = change.ref or ref
             if sha:
-                by_sha.setdefault(sha, change)
+                by_sha.setdefault((repo, sha), change)
                 change.sha = change.sha or sha
             hit = Hit(source, record)
             match record["kind"]:
