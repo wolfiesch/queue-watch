@@ -3,6 +3,8 @@
 ## Unreleased
 
 - The `github-actions` adapter sends each list's last ETag back with `If-None-Match`. GitHub does not count a `304 Not Modified` against the API rate limit, so run lists and job lists that have not changed since the last refresh no longer use up the account's hourly budget. Against a busy repository, 5 of the 6 run-list requests per refresh came back unchanged.
+- `--demo 2` simulates two repositories watched together, as a profile would: each gets its own merge queue strip, and branch names they share stay apart by repository.
+- Fix: a dashboard with several merge queues could crash on startup when one queue's strip was added while another source's update was redrawing the strips, and quitting right after a table row was highlighted could crash on exit.
 
 ## 0.3.0 - 2026-10-21
 

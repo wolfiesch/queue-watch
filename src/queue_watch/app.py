@@ -473,7 +473,8 @@ class QueueWatch(App):
         self.query_one(ChangeTable).show(visible, queue, self.selected, empty)
         tabs = self.query_one("#tabs", TabbedContent)
         tabs.get_tab(CHANGES).label = f"Changes {len(visible)}"
-        for source_id, strip in self.strips.items():
+        # Snapshot: awaiting show() lets a concurrent fetch mount a new strip.
+        for source_id, strip in list(self.strips.items()):
             records = snapshots.get(source_id, {}).get("records", [])
             mine = {
                 rid: change for (sid, rid), change in self.by_record.items() if sid == source_id
@@ -842,7 +843,10 @@ class QueueWatch(App):
 
     @on(DataTable.RowHighlighted)
     async def row_highlighted(self, event: DataTable.RowHighlighted) -> None:
-        if not self.rendering and event.data_table.id == self.active_pane():
+        # Highlights still arrive while the app shuts down and its widgets go away.
+        if not self.is_running or self.rendering:
+            return
+        if event.data_table.id == self.active_pane():
             await self.show_selection()
 
     @on(TabbedContent.TabActivated)

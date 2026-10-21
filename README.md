@@ -35,6 +35,7 @@ queue-watch profile add work --repo acme/api --repo acme/web
 queue-watch --config sources.toml        # any combination of sources
 queue-watch --repo owner/repo --once     # one JSON snapshot, no TUI
 queue-watch --demo                       # a simulated repository
+queue-watch --demo 2                     # two simulated repositories, as in a profile
 queue-watch --theme nord --ascii         # another Textual theme; ASCII glyphs only
 queue-watch --density comfortable        # title, owner and PR on a second line
 ```
@@ -63,6 +64,8 @@ queue-watch profile add default --repo acme/api                # opens outside a
 ```
 
 `profile add` writes Actions for each repository, plus its merge queue when the default branch has one, with the repository's name in each label. Repositories already in the profile are left alone, and anything written by hand stays. A profile is ordinary [source config](#sources), so you can add `command` and `flock-queue` sources too. When a dashboard spans several repositories, a branch name such as `main` in two of them is two rows, each labelled with its repository.
+
+![queue-watch --demo 2: two simulated repositories in one dashboard, each with its own merge queue strip, and rows that keep main and other shared branch names apart by repository](https://raw.githubusercontent.com/wolfiesch/queue-watch/main/docs/demo-profile.gif)
 
 ### Repository configs need trust
 
@@ -138,7 +141,7 @@ uv run pytest -q                        # includes SVG snapshot tests
 uv run pytest -q --snapshot-update      # after an intended layout change
 ```
 
-`docs/screenshot.png` is the wide layout snapshot rendered in a browser; `uv run python docs/record_demo.py` re-records `docs/demo.gif` (needs Chrome and ffmpeg). To release, bump `__version__` in `src/queue_watch/__init__.py`, merge, and push a matching `vX.Y.Z` tag; the release workflow tests, builds, publishes to PyPI with trusted publishing, and creates the GitHub release.
+`docs/screenshot.png` is the wide layout snapshot rendered in a browser; `uv run python docs/record_demo.py` re-records `docs/demo.gif`, and `--repos 2` records `docs/demo-profile.gif` (both need Chrome and ffmpeg). To release, bump `__version__` in `src/queue_watch/__init__.py`, merge, and push a matching `vX.Y.Z` tag; the release workflow tests, builds, publishes to PyPI with trusted publishing, and creates the GitHub release.
 
 ## License
 

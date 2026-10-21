@@ -18,6 +18,7 @@ Examples:
   queue-watch --config sources.toml --once
   queue-watch trust                         # after reviewing .queue-watch.toml
   queue-watch --demo                        # simulated repository, no login needed
+  queue-watch --demo 2                      # two simulated repositories, like a profile
   queue-watch profile add work --repo acme/api --repo acme/web
   queue-watch profile list
 """
@@ -144,7 +145,13 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument("--config", type=Path, help="TOML file with [[source]] tables")
     group.add_argument("--profile", help="NAME for ~/.config/queue-watch/NAME.toml")
     group.add_argument(
-        "--demo", action="store_true", help="simulated repository; no network or login"
+        "--demo",
+        nargs="?",
+        const=1,
+        type=int,
+        choices=(1, 2),
+        metavar="REPOS",
+        help="simulated repository, or 2 for two watched like a profile; no network or login",
     )
     parser.add_argument("--once", action="store_true", help="print JSON once; no TUI")
     parser.add_argument(
@@ -165,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
 
             clock = demo.Clock()
             widgets.now = clock.now  # ages and estimates follow the simulated clock
-            sources = demo.sources(clock)
+            sources = demo.sources(clock, args.demo)
         elif args.config:
             sources = load(args.config.expanduser())
         elif args.profile:
