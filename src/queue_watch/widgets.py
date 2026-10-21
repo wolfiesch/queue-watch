@@ -603,6 +603,12 @@ class ChangeTable(Vertical):
     @on(OptionList.OptionSelected)
     def _highlighted(self, event) -> None:
         event.stop()
+        rows = event.option_list
+        # Highlight events arrive asynchronously; one queued by a rebuild can land after a
+        # newer selection (a chip click) and must not drag the selection back.
+        current = rows.highlighted
+        if current is None or rows.get_option_at_index(current).id != event.option_id:
+            return
         if event.option_id and event.option_id.startswith("c:"):
             self.post_message(ChangeSelected(event.option_id[2:]))
 
