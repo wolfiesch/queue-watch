@@ -46,14 +46,14 @@ class GitHubActions(Adapter):
         if not re.fullmatch(r"[\w.-]+/[\w.-]+", repo):
             raise ValueError(f"repo must be owner/repo, got {repo!r}")
         self.repo = repo
-        self.etags: dict[str, tuple[str, object]] = {}
+        self.etags: dict[str, tuple[str, object, bool]] = {}
 
     async def get(self, endpoint: str) -> tuple[object, bool]:
         """GET one page, sending back the last ETag; returns ``(body, more_pages)``.
 
-        GitHub does not count a 304 against the rate limit, so a list that has not
-        changed since the last poll costs nothing. Only single-page responses are
-        cached: a later page can change while the first page's ETag stays the same.
+        GitHub does not count a 304 against the rate limit, so a page that has not
+        changed since the last poll costs nothing. The cache is per page: a 304 says
+        nothing about later pages, so callers that need them still fetch them.
         """
         argv = ["gh", "api", "--include", endpoint]
         cached = self.etags.get(endpoint)
@@ -63,7 +63,9 @@ class GitHubActions(Adapter):
         head, _, body = stdout.decode(errors="replace").replace("\r\n", "\n").partition("\n\n")
         status, *lines = head.split("\n")
         if cached and status.split()[1:2] == ["304"]:
-            return cached[1], False
+            if endpoint in self.etags:  # evictions can run while this request was out
+                self.etags[endpoint] = self.etags.pop(endpoint)  # most recently used last
+            return cached[1], cached[2]
         if returncode:
             raise process.failure(argv, returncode, stderr)
         headers = {}
@@ -74,8 +76,8 @@ class GitHubActions(Adapter):
         data = json.loads(body)
         more = 'rel="next"' in headers.get("link", "")
         self.etags.pop(endpoint, None)
-        if headers.get("etag") and not more:
-            self.etags[endpoint] = (headers["etag"], data)
+        if headers.get("etag"):
+            self.etags[endpoint] = (headers["etag"], data, more)
             while len(self.etags) > ETAGS:
                 self.etags.pop(next(iter(self.etags)))
         return data, more

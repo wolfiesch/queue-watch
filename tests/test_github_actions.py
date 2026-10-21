@@ -81,6 +81,8 @@ def test_old_active_runs_survive_recent_page_and_newer_state_wins(monkeypatch):
 
 def test_jobs_become_child_records_with_steps_across_pages(monkeypatch):
     async def first_page(argv):
+        if 'If-None-Match: W/"j"' in argv:
+            return not_modified('W/"j"')
         return http(
             {"jobs": []}, etag='W/"j"', link='<https://api.github.com/x?page=2>; rel="next"'
         )
@@ -112,12 +114,13 @@ def test_jobs_become_child_records_with_steps_across_pages(monkeypatch):
     monkeypatch.setattr(github_actions.process, "capture", first_page)
     monkeypatch.setattr(github_actions.process, "run_json", response)
     adapter = GitHubActions(repo="owner/repo")
-    jobs = asyncio.run(adapter.children({"id": "3"}))
-    assert adapter.etags == {}  # a later page can change under an unchanged first page
-    assert [(j["title"], j["state"], j["fields"]["runner"]) for j in jobs] == [
-        ("test", "running", "linux-1"),
-        ("lint", "neutral", None),
-    ]
+    for _ in range(2):  # the second first-page request answers 304
+        jobs = asyncio.run(adapter.children({"id": "3"}))
+        # A 304 says nothing about later pages, so every page is still fetched.
+        assert [(j["title"], j["state"], j["fields"]["runner"]) for j in jobs] == [
+            ("test", "running", "linux-1"),
+            ("lint", "neutral", None),
+        ]
     assert [(s["title"], s["state"]) for s in jobs[0]["children"]] == [("Run", "failure")]
 
 
@@ -134,7 +137,9 @@ def test_unchanged_lists_are_revalidated_and_reuse_the_cached_body(monkeypatch):
         if header == f"If-None-Match: {etag}":
             return not_modified(etag)
         runs = queued if endpoint.endswith("status=queued") else []
-        return http({"total_count": len(runs), "workflow_runs": runs}, etag=etag)
+        # The unfiltered list always has older pages; only its first page is read.
+        link = None if "status=" in endpoint else '<https://api.github.com/x?page=2>; rel="next"'
+        return http({"total_count": len(runs), "workflow_runs": runs}, etag=etag, link=link)
 
     monkeypatch.setattr(github_actions.process, "capture", response)
     adapter = GitHubActions(repo="owner/repo")
