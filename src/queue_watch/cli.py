@@ -5,11 +5,11 @@ with the wheel. Keyboard: tab/arrows, / search, r refresh, p pause, o open the
 selected record, q quit. Times are shown in America/Los_Angeles.
 
 With no source flags, queue-watch uses the repository's .queue-watch.toml once
-you have trusted it, and otherwise the current checkout's GitHub repository:
-Actions, plus the merge queue when the default branch has one. Nothing is ever
-changed: no reruns, cancellations, merges, lock acquisition or remote installs.
-Last good data stays visible on failure and is labelled stale. --once prints one
-JSON snapshot per source and exits nonzero when any source fails.
+you have trusted it, then the current checkout's GitHub repository (Actions, plus
+the merge queue when the default branch has one), then the profile named default.
+Nothing is ever changed: no reruns, cancellations, merges, lock acquisition or
+remote installs. Last good data stays visible on failure and is labelled stale.
+--once prints one JSON snapshot per source and exits nonzero when any source fails.
 
 Examples:
   queue-watch                               # inside a GitHub checkout
@@ -18,6 +18,8 @@ Examples:
   queue-watch --config sources.toml --once
   queue-watch trust                         # after reviewing .queue-watch.toml
   queue-watch --demo                        # simulated repository, no login needed
+  queue-watch profile add work --repo acme/api --repo acme/web
+  queue-watch profile list
 """
 
 from __future__ import annotations
@@ -31,7 +33,18 @@ from pathlib import Path
 
 from . import __version__
 from .config import ConfigError, Source, load
-from .discovery import CONFIG_NAME, detect, github_sources, profile_path, repo_config, trust
+from .discovery import (
+    CONFIG_NAME,
+    DEFAULT_PROFILE,
+    add_to_profile,
+    describe_profile,
+    detect,
+    github_sources,
+    profile_path,
+    profiles,
+    repo_config,
+    trust,
+)
 
 
 async def once(sources: list[Source]) -> int:
@@ -73,10 +86,53 @@ def trust_command(argv: list[str]) -> int:
     return 0
 
 
+def profile_command(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="queue-watch profile",
+        description="Manage profiles: named source lists under ~/.config/queue-watch. "
+        f"The {DEFAULT_PROFILE!r} profile is used outside a GitHub checkout.",
+    )
+    commands = parser.add_subparsers(dest="command", required=True)
+    add = commands.add_parser(
+        "add",
+        help="add GitHub repositories to a profile, creating it if needed",
+        description="Append Actions, plus the merge queue when the default branch has "
+        "one, for each repository. Repositories already in the profile are kept as they are.",
+    )
+    add.add_argument("name", help=f"profile name; {DEFAULT_PROFILE!r} is used outside a checkout")
+    add.add_argument(
+        "--repo", action="append", required=True, metavar="OWNER/REPO", help="repeatable"
+    )
+    commands.add_parser("list", help="list profiles and their sources")
+    args = parser.parse_args(argv)
+    if args.command == "list":
+        found = profiles()
+        if not found:
+            print(f"No profiles in {profile_path(DEFAULT_PROFILE).parent}.")
+            print("Create one: queue-watch profile add NAME --repo owner/repo")
+        for path in found:
+            note = "  (used outside a GitHub checkout)" if path.stem == DEFAULT_PROFILE else ""
+            print(f"{path.stem}{note}")
+            for line in describe_profile(path):
+                print(f"  {line}")
+        return 0
+    try:
+        path, added, skipped = asyncio.run(add_to_profile(args.name, args.repo))
+    except (ConfigError, OSError, UnicodeDecodeError) as error:
+        parser.error(str(error))
+    for repo in added:
+        print(f"Added {repo} to {path}")
+    for repo in skipped:
+        print(f"{repo} is already in {path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["trust"]:
         return trust_command(argv[1:])
+    if argv[:1] == ["profile"]:
+        return profile_command(argv[1:])
     parser = argparse.ArgumentParser(
         prog="queue-watch",
         description=__doc__,

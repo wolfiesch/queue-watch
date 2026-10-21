@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 - 2026-10-21
+
+- Profiles for groups of repositories: `queue-watch profile add NAME --repo owner/repo [--repo ...]` creates or extends `~/.config/queue-watch/NAME.toml`, and `queue-watch profile list` shows every profile and its sources.
+- Outside a GitHub checkout, `queue-watch` opens the profile named `default`.
+- Fix: a dashboard watching several repositories no longer folds the same branch name (such as `main`) from different repositories into one row. Records carry an optional `repo`; rows and the inspector name it when more than one repository is shown.
+
 ## 0.2.0 - 2026-10-21
 
 - `--demo` plays a simulated repository whose CI runs and merge queue move on their own: merges land, checks fail and get fixed, and ages tick. No network or GitHub login needed.
