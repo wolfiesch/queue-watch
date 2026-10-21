@@ -56,6 +56,8 @@ class Symbols:
     rule: str
     dash: str
     live: str
+    folded: str
+    unfolded: str
 
 
 UNICODE = Symbols(
@@ -79,6 +81,8 @@ UNICODE = Symbols(
     rule="─",
     dash="—",
     live="✓",
+    folded="▸",
+    unfolded="▾",
 )
 ASCII = Symbols(
     glyphs={
@@ -101,6 +105,8 @@ ASCII = Symbols(
     rule="-",
     dash="-",
     live="+",
+    folded=">",
+    unfolded="v",
 )
 SYMBOLS = UNICODE
 
@@ -596,7 +602,11 @@ def change_detail(change: Change, width: int) -> Content:
 
 
 class ChangeTable(Vertical):
-    """Header line over an OptionList: group rows are disabled, so the cursor skips them."""
+    """Header line over an OptionList of group rows and change rows.
+
+    Enter or a click on a group row folds or unfolds it. Done starts folded whenever
+    another group has changes; a group the user has toggled keeps that choice.
+    """
 
     def __init__(self, density: str = "compact") -> None:
         super().__init__(id="changes")
@@ -606,6 +616,13 @@ class ChangeTable(Vertical):
         self.width = 0
         self.empty = "Waiting for sources..."
         self.density = density
+        self.folds: dict[str, bool] = {}  # explicit user choices by group key
+
+    def folded(self, key: str) -> bool:
+        if key in self.folds:
+            return self.folds[key]
+        others = any(c.group != "done" for c in self.changes)
+        return key == "done" and others
 
     def compose(self) -> ComposeResult:
         yield Static(id="colhead")
@@ -636,16 +653,18 @@ class ChangeTable(Vertical):
         for key, label, state, changes in grouped(self.changes):
             if not changes:
                 continue
+            folded = self.folded(key)
+            marker = SYMBOLS.folded if folded else SYMBOLS.unfolded
             title = Content.assemble(
                 glyph(state),
                 " ",
                 (label.upper(), f"b {STATE_STYLE[state]}"),
-                muted(f"  {len(changes)} "),
+                muted(f"  {len(changes)} {marker} "),
             )
             rule = SYMBOLS.rule * max(0, self.width - title.cell_length)
-            options.append(
-                Option(Content.assemble(title, muted(rule)), id=f"g:{key}", disabled=True)
-            )
+            options.append(Option(Content.assemble(title, muted(rule)), id=f"g:{key}"))
+            if folded:
+                continue
             for change in changes:
                 row = Content(" ").join(
                     fit(change_cell(c, change, compact), c.width, c.align) for c in cols
@@ -660,15 +679,27 @@ class ChangeTable(Vertical):
         rows.add_options(options)
         self.highlight(self.selected)
 
-    def highlight(self, key: str | None) -> None:
+    def highlight(self, key: str | None, reveal: bool = False) -> None:
+        """Move the cursor to a change; ``reveal`` unfolds its group if needed."""
+        if key is None:
+            return
+        change = next((c for c in self.changes if c.key == key), None)
+        if reveal and change and self.folded(change.group):
+            self.folds[change.group] = False
+            self.rebuild()
         rows = self.query_one("#rows", OptionList)
-        if key is not None:
-            try:
-                index = rows.get_option_index(f"c:{key}")
-            except OptionDoesNotExist:
-                return
-            if rows.highlighted != index:
-                rows.highlighted = index
+        try:
+            index = rows.get_option_index(f"c:{key}")
+        except OptionDoesNotExist:
+            return
+        if rows.highlighted != index:
+            rows.highlighted = index
+
+    def toggle(self, group: str) -> None:
+        self.folds[group] = not self.folded(group)
+        self.rebuild()
+        rows = self.query_one("#rows", OptionList)
+        rows.highlighted = rows.get_option_index(f"g:{group}")
 
     @on(OptionList.OptionHighlighted)
     @on(OptionList.OptionSelected)
@@ -680,8 +711,11 @@ class ChangeTable(Vertical):
         current = rows.highlighted
         if current is None or rows.get_option_at_index(current).id != event.option_id:
             return
-        if event.option_id and event.option_id.startswith("c:"):
-            self.post_message(ChangeSelected(event.option_id[2:]))
+        option_id = event.option_id or ""
+        if option_id.startswith("c:"):
+            self.post_message(ChangeSelected(option_id[2:]))
+        elif option_id.startswith("g:") and isinstance(event, OptionList.OptionSelected):
+            self.toggle(option_id[2:])
 
 
 # --- inspector ------------------------------------------------------------- #

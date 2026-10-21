@@ -11,7 +11,7 @@ from textual.widgets import OptionList, TabbedContent
 from queue_watch.adapters import Adapter
 from queue_watch.app import QueueWatch
 from queue_watch.config import Source
-from queue_watch.widgets import Inspector, QueueChip, change_columns
+from queue_watch.widgets import ChangeTable, Inspector, QueueChip, change_columns
 
 
 def iso(minutes_ago: float) -> str:
@@ -175,6 +175,43 @@ def test_search_with_no_hits_names_the_query() -> None:
             assert (
                 str(rows.get_option_at_index(0).prompt) == 'No changes match "zzz". esc to clear.'
             )
+
+    asyncio.run(run())
+
+
+def test_done_group_starts_folded_and_enter_toggles_it() -> None:
+    merged = {
+        "id": "a1",
+        "kind": "attempt",
+        "state": "success",
+        "title": "#7 Old change",
+        "ref": "old",
+        "finished_at": iso(30),
+    }
+
+    def ids(rows: OptionList) -> list[str]:
+        return [rows.get_option_at_index(i).id for i in range(rows.option_count)]
+
+    async def run() -> None:
+        app = QueueWatch([*sources(), Source("hist", "History", 60, Fake([merged]))])
+        async with app.run_test(size=(160, 45)) as pilot:
+            await loaded(pilot)
+            rows = app.query_one("#rows", OptionList)
+            assert "g:done" in ids(rows) and "c:old" not in ids(rows)
+            assert "1 ▸" in str(rows.get_option("g:done").prompt)
+            rows.highlighted = ids(rows).index("g:done")
+            await pilot.press("enter")
+            assert "c:old" in ids(rows)
+            # The user's choice survives the next fetch.
+            await pilot.press("r")
+            await loaded(pilot)
+            assert "c:old" in ids(rows)
+            rows.highlighted = ids(rows).index("g:done")
+            await pilot.press("enter")
+            assert "c:old" not in ids(rows)
+            # Selecting a change from elsewhere (a queue chip) unfolds its group.
+            app.query_one(ChangeTable).highlight("old", reveal=True)
+            assert rows.get_option_at_index(rows.highlighted).id == "c:old"
 
     asyncio.run(run())
 

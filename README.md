@@ -24,7 +24,7 @@ queue-watch --density comfortable        # title, owner and PR on a second line
 
 With no flags, queue-watch looks for a `.queue-watch.toml` at the root of the current Git checkout. Without one, it watches the checkout's GitHub repository: Actions runs, plus the merge queue when the default branch has one. `--profile NAME` reads `$XDG_CONFIG_HOME/queue-watch/NAME.toml` (default `~/.config`).
 
-The Changes tab groups changes into Needs attention, Running, Queued and Done; every view a source reports also gets its own tab. Select a change or a queue chip to see its CI checks, the jobs of the most notable one, its queue position and ETA, and recent history in the inspector.
+The Changes tab groups changes into Needs attention, Running, Queued and Done; every view a source reports also gets its own tab. Done starts folded while any other group has changes; press enter on a group row, or click it, to fold or unfold it. Select a change or a queue chip to see its CI checks, the jobs of the most notable one, its queue position and ETA, and recent history in the inspector.
 
 Each merge queue gets a strip above the tabs: its entries in merge order, when it should clear, merges in the last hour, and how long recent attempts took. Queue depth over the session appears as a sparkline once two fetches have answered; sources report only the current queue, so the history starts when queue-watch does.
 

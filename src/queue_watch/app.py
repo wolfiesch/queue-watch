@@ -777,7 +777,7 @@ class QueueWatch(App):
         }:
             self.selected = change.key
             tabs.active = CHANGES
-            self.query_one(ChangeTable).highlight(change.key)
+            self.query_one(ChangeTable).highlight(change.key, reveal=True)
             self.query_one("#rows").focus()
             await self.show_selection()
             return
