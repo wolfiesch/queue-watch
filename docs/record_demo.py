@@ -1,6 +1,7 @@
-"""Record docs/demo.gif from ``queue-watch --demo``.
+"""Record docs/demo.gif from ``queue-watch --demo``, or with ``--repos 2``
+docs/demo-profile.gif from ``queue-watch --demo 2``.
 
-    uv run python docs/record_demo.py
+    uv run python docs/record_demo.py [--repos 2]
 
 Needs Google Chrome (set CHROME to its binary elsewhere than macOS) to rasterise
 the SVG frames, and ffmpeg to assemble the GIF.
@@ -8,6 +9,7 @@ the SVG frames, and ffmpeg to assemble the GIF.
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import os
 import re
@@ -20,23 +22,24 @@ from pathlib import Path
 from queue_watch import demo, widgets
 from queue_watch.app import QueueWatch
 
-SIZE = (112, 32)
+# Repositories simulated: terminal size, output file.
+VARIANTS = {1: ((112, 32), "demo.gif"), 2: ((120, 40), "demo-profile.gif")}
 SECONDS = 32
 FPS = 2
 WIDTH = 1000  # GIF width in pixels
 # Keys pressed at a given second: walk the change list, visit the queue tab, return.
 KEYS = {6: "down", 8: "down", 10: "down", 12: "down", 17: "3", 25: "1", 27: "up"}
 CHROME = os.environ.get("CHROME", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
-OUT = Path(__file__).with_name("demo.gif")
 
 
-async def capture(frames: Path) -> list[float]:
+async def capture(frames: Path, repos: int) -> list[float]:
     os.environ.pop("NO_COLOR", None)  # the GIF shows colour whatever the shell asks for
     clock = demo.Clock()
     widgets.now = clock.now
-    app = QueueWatch(demo.sources(clock))
+    app = QueueWatch(demo.sources(clock, repos))
+    title = "queue-watch --demo" + (f" {repos}" if repos > 1 else "")
     stamps = []
-    async with app.run_test(size=SIZE) as pilot:
+    async with app.run_test(size=VARIANTS[repos][0]) as pilot:
         await pilot.pause(2)
         start = time.monotonic()
         pressed = set()
@@ -46,7 +49,7 @@ async def capture(frames: Path) -> list[float]:
                 pressed.add(second)
                 await pilot.press(KEYS[second])
             await pilot.pause(max(0, start + frame / FPS - time.monotonic()))
-            svg = app.export_screenshot(title="queue-watch --demo")
+            svg = app.export_screenshot(title=title)
             (frames / f"{frame:03}.svg").write_text(svg)
             stamps.append(time.monotonic() - start)
     return stamps
@@ -64,9 +67,13 @@ def rasterise(svg: Path) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--repos", type=int, choices=sorted(VARIANTS), default=1)
+    repos = parser.parse_args().repos
+    out = Path(__file__).with_name(VARIANTS[repos][1])
     with tempfile.TemporaryDirectory() as tmp:
         frames = Path(tmp)
-        stamps = asyncio.run(capture(frames))
+        stamps = asyncio.run(capture(frames, repos))
         with ThreadPoolExecutor(8) as pool:
             list(pool.map(rasterise, sorted(frames.glob("*.svg"))))
         # Each frame lasts until the next one was captured.
@@ -79,10 +86,10 @@ def main() -> None:
         subprocess.run(
             ["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i",
              frames / "frames.txt", "-vf", f"scale={WIDTH}:-1:flags=lanczos,{palette}",
-             "-loop", "0", OUT],
+             "-loop", "0", out],
             check=True,
         )  # fmt: skip
-    print(f"{OUT} {OUT.stat().st_size // 1024} KiB")
+    print(f"{out} {out.stat().st_size // 1024} KiB")
 
 
 if __name__ == "__main__":

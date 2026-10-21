@@ -1,4 +1,4 @@
-"""``--demo``: a made-up repository whose CI and merge queue move on their own.
+"""``--demo``: made-up repositories whose CI and merge queues move on their own.
 
 Nothing touches the network. Simulated time runs at ``SPEED`` times the wall clock
 so a minute of watching shows several merges, a failed check and its fix. Events
@@ -19,20 +19,60 @@ from .model import SCHEMA
 SPEED = 15  # simulated seconds per wall-clock second
 STEP = 30  # simulated seconds per tick
 WARMUP = 40  # ticks simulated before the first frame, so history exists
-REPO = "https://github.com/acme/widgets"
 NOTE = "Demo data: a simulated repository. Nothing here is real."
 
-PULLS = (
-    ("Stream large uploads", "feat/stream-upload", "dana"),
-    ("Cache parsed headers", "feat/parser-cache", "lee"),
-    ("Document merge queue", "docs/merge-queue", "sam"),
-    ("Fix font fallback on Windows", "fix/font-fallback", "ari"),
-    ("Faster diff rendering", "feat/diff-speed", "noor"),
-    ("Retry flaky socket reads", "fix/socket-retry", "kai"),
-    ("Bump lockfile", "chore/lockfile", "lee"),
-    ("Add CSV exporter", "feat/csv-export", "dana"),
-    ("Tidy error messages", "fix/errors", "sam"),
-    ("Theme tokens for dark mode", "feat/theme", "noor"),
+
+@dataclass(frozen=True)
+class Repo:
+    """One simulated repository: its pull requests and where its numbering starts."""
+
+    name: str
+    pulls: tuple[tuple[str, str, str], ...]  # title, branch, owner
+    first_pull: int
+    first_run: int
+    release: str | None  # a release run left waiting for approval on main
+    offset: int  # phase into the event patterns, so repositories move out of step
+
+    @property
+    def url(self) -> str:
+        return f"https://github.com/{self.name}"
+
+
+WIDGETS = Repo(
+    "acme/widgets",
+    (
+        ("Stream large uploads", "feat/stream-upload", "dana"),
+        ("Cache parsed headers", "feat/parser-cache", "lee"),
+        ("Document merge queue", "docs/merge-queue", "sam"),
+        ("Fix font fallback on Windows", "fix/font-fallback", "ari"),
+        ("Faster diff rendering", "feat/diff-speed", "noor"),
+        ("Retry flaky socket reads", "fix/socket-retry", "kai"),
+        ("Bump lockfile", "chore/lockfile", "lee"),
+        ("Add CSV exporter", "feat/csv-export", "dana"),
+        ("Tidy error messages", "fix/errors", "sam"),
+        ("Theme tokens for dark mode", "feat/theme", "noor"),
+    ),
+    first_pull=482,
+    first_run=9100,
+    release="v2.4.0",
+    offset=0,
+)
+# Shares branch names (main, chore/lockfile, fix/errors) with WIDGETS: a profile
+# watching both must keep them apart.
+GADGETS = Repo(
+    "acme/gadgets",
+    (
+        ("Pair over Bluetooth LE", "feat/ble-pairing", "mika"),
+        ("Bump lockfile", "chore/lockfile", "kai"),
+        ("Fix battery drain in sleep", "fix/sleep-drain", "ari"),
+        ("Firmware update screen", "feat/fw-update", "noor"),
+        ("Tidy error messages", "fix/errors", "lee"),
+        ("Calibrate the gyro at boot", "feat/gyro-cal", "dana"),
+    ),
+    first_pull=1201,
+    first_run=5300,
+    release=None,
+    offset=3,
 )
 ARRIVAL_GAPS = (2, 1, 3, 6, 7, 2, 3, 8)  # ticks between arrivals: bursts, then lulls
 CHECK_TICKS = (3, 5, 4, 6, 3)  # how long CI takes on a pull request
@@ -96,6 +136,7 @@ class Entry:
 @dataclass
 class Simulation:
     clock: Clock
+    repo: Repo = WIDGETS
     epoch: float = 0.0  # simulated time of tick 0
     tick: int = 0
     pulls: int = 0
@@ -108,7 +149,9 @@ class Simulation:
 
     def __post_init__(self) -> None:
         self.epoch = self.clock.now() - WARMUP * STEP
-        self.release = self.start_run("Release", "v2.4.0", "main", 2, 0, "blocked")
+        self.release = None
+        if self.repo.release:
+            self.release = self.start_run("Release", self.repo.release, "main", 2, 0, "blocked")
         self.advance()
 
     def at(self, tick: int) -> float:
@@ -122,8 +165,8 @@ class Simulation:
 
     def start_run(self, workflow: str, title: str, ref: str, ticks: int, salt: int, outcome: str):
         run = Run(
-            9100 + self.started, workflow, title, ref, sha(ref, salt), self.tick,
-            self.tick + ticks, outcome,
+            self.repo.first_run + self.started, workflow, title, ref, sha(self.repo.name, ref, salt),
+            self.tick, self.tick + ticks, outcome,
         )  # fmt: skip
         self.started += 1
         self.runs.append(run)
@@ -152,6 +195,7 @@ class Simulation:
                 {
                     "id": f"attempt-{self.merges}",
                     "kind": "attempt",
+                    "repo": self.repo.name,
                     "state": "failure" if failed else "success",
                     "raw_state": "failed" if failed else "merged",
                     "title": f"#{head.number} {head.title}",
@@ -160,7 +204,7 @@ class Simulation:
                     "owner": head.owner,
                     "started_at": iso(self.at(head.since)),
                     "finished_at": iso(self.at(tick)),
-                    "url": f"{REPO}/pull/{head.number}",
+                    "url": f"{self.repo.url}/pull/{head.number}",
                     "fields": {"pull_request": head.number},
                 }
             )
@@ -175,17 +219,18 @@ class Simulation:
                 first.state, first.since = "merging", tick
         del self.runs[: max(0, len(self.runs) - 14)]
         del self.attempts[: max(0, len(self.attempts) - 40)]  # about an hour of merges
-        if self.release not in self.runs:
+        if self.release and self.release not in self.runs:
             self.runs.insert(0, self.release)
 
     def arrive(self) -> None:
-        title, ref, owner = PULLS[self.pulls % len(PULLS)]
-        number = 482 + self.pulls
-        fails = self.pulls % FAILS_EVERY == FAILS_EVERY - 1
-        ticks = CHECK_TICKS[self.pulls % len(CHECK_TICKS)]
+        pulls, phase = self.repo.pulls, self.pulls + self.repo.offset
+        title, ref, owner = pulls[self.pulls % len(pulls)]
+        number = self.repo.first_pull + self.pulls
+        fails = phase % FAILS_EVERY == FAILS_EVERY - 1
+        ticks = CHECK_TICKS[phase % len(CHECK_TICKS)]
         run = self.start_run("CI", title, ref, ticks, self.tick, "failure" if fails else "success")
         self.queue.append(Entry(number, title, ref, owner, self.tick, run, fails, since=self.tick))
-        self.next_arrival = self.tick + ARRIVAL_GAPS[self.pulls % len(ARRIVAL_GAPS)]
+        self.next_arrival = self.tick + ARRIVAL_GAPS[phase % len(ARRIVAL_GAPS)]
         self.pulls += 1
 
     def run_record(self, run: Run) -> dict:
@@ -214,6 +259,7 @@ class Simulation:
         return {
             "id": str(run.id),
             "kind": "run",
+            "repo": self.repo.name,
             "state": state,
             "raw_state": {"running": "in_progress", "blocked": "waiting"}.get(state, state),
             "title": run.workflow,
@@ -222,7 +268,7 @@ class Simulation:
             "sha": run.sha,
             "created_at": iso(self.at(run.start)),
             "updated_at": iso(self.at(min(self.tick, run.end))),
-            "url": f"{REPO}/actions/runs/{run.id}",
+            "url": f"{self.repo.url}/actions/runs/{run.id}",
             "fields": {"run_id": run.id, "attempt": 1},
             "children": jobs,
         }
@@ -240,6 +286,7 @@ class Simulation:
         return {
             "id": f"entry-{entry.number}",
             "kind": "queue_entry",
+            "repo": self.repo.name,
             "state": state,
             "raw_state": raw,
             "title": f"#{entry.number} {entry.title}",
@@ -248,7 +295,7 @@ class Simulation:
             "owner": entry.owner,
             "position": position,
             "created_at": iso(self.at(entry.joined)),
-            "url": f"{REPO}/pull/{entry.number}",
+            "url": f"{self.repo.url}/pull/{entry.number}",
             "fields": fields,
         }
 
@@ -298,9 +345,20 @@ class DemoMergeQueue(DemoCI):
         return self.simulation.merge_queue()
 
 
-def sources(clock: Clock) -> list[Source]:
-    simulation = Simulation(clock)
-    return [
-        Source("ci", DemoCI.label, 2, DemoCI(simulation)),
-        Source("merge-queue", DemoMergeQueue.label, 2, DemoMergeQueue(simulation)),
-    ]
+def sources(clock: Clock, repos: int = 1) -> list[Source]:
+    """One simulated repository, or two watched together the way a profile would."""
+    if repos == 1:
+        simulation = Simulation(clock)
+        return [
+            Source("ci", DemoCI.label, 2, DemoCI(simulation)),
+            Source("merge-queue", DemoMergeQueue.label, 2, DemoMergeQueue(simulation)),
+        ]
+    result = []
+    for repo in (WIDGETS, GADGETS)[:repos]:
+        simulation = Simulation(clock, repo)
+        prefix, name = repo.name.replace("/", "-"), repo.name.split("/")[1]
+        result += [
+            Source(f"{prefix}-ci", f"{name} CI", 2, DemoCI(simulation)),
+            Source(f"{prefix}-merge-queue", f"{name} merge queue", 2, DemoMergeQueue(simulation)),
+        ]
+    return result
