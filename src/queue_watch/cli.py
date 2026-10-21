@@ -85,6 +85,10 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument("--config", type=Path, help="TOML file with [[source]] tables")
     group.add_argument("--profile", help="NAME for ~/.config/queue-watch/NAME.toml")
     parser.add_argument("--once", action="store_true", help="print JSON once; no TUI")
+    parser.add_argument(
+        "--theme", default="tokyo-night", help="Textual theme (default tokyo-night)"
+    )
+    parser.add_argument("--ascii", action="store_true", help="ASCII glyphs and borders only")
     args = parser.parse_args(argv)
     try:
         if args.config:
@@ -103,7 +107,12 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("interactive mode needs a terminal; use --once for JSON")
     from .app import QueueWatch
 
-    QueueWatch(sources).run(mouse=True)
+    app = QueueWatch(sources, theme=args.theme, ascii=args.ascii)
+    if args.theme not in app.available_themes:
+        parser.error(
+            f"unknown theme {args.theme!r}; choose from {', '.join(sorted(app.available_themes))}"
+        )
+    app.run(mouse=True)
     return 0
 
 
