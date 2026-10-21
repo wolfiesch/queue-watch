@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime, timedelta
 
+from textual.content import Content
 from textual.widgets import OptionList, TabbedContent
 
 from queue_watch.adapters import Adapter
@@ -155,3 +156,50 @@ def test_change_rows_exactly_fill_the_table_at_every_width() -> None:
             cols = change_columns(width, queue)
             assert sum(c.width for c in cols) + len(cols) - 1 == width, (width, queue)
             assert cols[-1].key == "age"
+
+
+def test_markup_in_adapter_strings_is_shown_literally() -> None:
+    hostile = [
+        {
+            "id": "h1",
+            "kind": "queue_entry",
+            "state": "running",
+            "title": "handle [/dev] paths",
+            "raw_state": "[/x]",
+            "ref": "h",
+            "sha": "[@click=app.quit]x[/]",
+        },
+        {
+            "id": "h2",
+            "kind": "queue_entry",
+            "state": "queued",
+            "title": "[b]two[/b]",
+            "ref": "h2",
+            "position": 1,
+        },
+    ]
+
+    class Hostile(Fake):
+        async def snapshot(self) -> dict:
+            snapshot = await super().snapshot()
+            view = {"kind": "queue_entry", "label": "[/oops]", "columns": [{"key": "title"}]}
+            return {**snapshot, "views": [view]}
+
+    async def run() -> None:
+        app = QueueWatch([Source("mq", "MQ", 60, Hostile(hostile))])
+        async with app.run_test(size=(140, 40)) as pilot:
+            for _ in range(100):
+                await pilot.pause(0.02)
+                if len(app.query(QueueChip)) == 2:
+                    break
+            chips = list(app.query(QueueChip))
+            # Read back as escaped markup: the brackets are text, not a closing tag.
+            assert chips[0].border_title == Content("[/x] · next").markup
+            await pilot.hover(chips[0])
+            await pilot.click(chips[0])
+            await pilot.press("c")
+            await pilot.pause(0.6)  # tooltip delay
+            assert app.is_running and app.selected == "h"
+            assert "[/oops]" in str(app.query_one("#tabs").get_tab("pane0-tab").label)
+
+    asyncio.run(run())

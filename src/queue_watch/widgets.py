@@ -350,7 +350,8 @@ class QueueChip(Static):
     def on_mount(self) -> None:
         position = self.record.get("position")
         label = str(position) if isinstance(position, int) else raw(self.record)
-        self.border_title = f"{label} {SYMBOLS.dot} next" if self.holder else label
+        # Strings assigned to border_title and tooltip parse as markup; Content does not.
+        self.border_title = Content(f"{label} {SYMBOLS.dot} next" if self.holder else label)
         title = clean(self.record["title"])
         if self.change and self.change.pr and not title.startswith("#"):
             title = f"#{self.change.pr} {title}"
@@ -363,7 +364,7 @@ class QueueChip(Static):
                 (title, "b"), "\n", glyph(self.record["state"]), f" {raw(self.record)}", *tail
             )
         )
-        self.tooltip = title
+        self.tooltip = Content(title)
 
     def on_click(self) -> None:
         self.post_message(ChipClicked(self.source, self.record["id"]))

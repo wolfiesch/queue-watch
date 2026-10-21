@@ -366,11 +366,11 @@ class QueueWatch(App):
         await self.query_one("#queues", Vertical).mount(strip, before=later[0] if later else None)
         self.strips[source_id] = strip
 
-    def pane_label(self, source_id: str, view: dict, count: int) -> str:
+    def pane_label(self, source_id: str, view: dict, count: int) -> Content:
         label = view.get("label") or view["kind"]
         if len(self.sources) > 1:
             label = f"{self.sources[source_id].label} {widgets.SYMBOLS.dot} {label}"
-        return f"{clean(label)} {count}"
+        return Content(f"{clean(label)} {count}")
 
     # --- rendering ------------------------------------------------------- #
 
@@ -542,7 +542,7 @@ class QueueWatch(App):
     def change_view(self, change: Change):
         meta = [clean(change.ref or change.key)]
         if change.sha:
-            meta.append(change.sha[:7])
+            meta.append(clean(change.sha)[:7])
         if change.pr:
             meta.append(f"#{change.pr}")
         if change.owner:
@@ -806,7 +806,7 @@ class QueueWatch(App):
         _, sha = self.selection()
         if sha:
             self.copy_to_clipboard(sha)
-            self.notify(clean(sha), title="Copied SHA", timeout=3)
+            self.notify(clean(sha), title="Copied SHA", timeout=3, markup=False)
 
     def action_tab(self, index: int) -> None:
         panes = [pane.id for pane in self.query(TabPane)]
