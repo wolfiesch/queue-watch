@@ -21,6 +21,8 @@ from queue_watch.config import Source
 
 FIXTURE = json.loads((Path(__file__).parents[1] / "design/fixtures/demo.json").read_text())
 SIZES = {"wide": (160, 45), "narrow": (100, 30), "short": (160, 20)}
+# Queue length over earlier fetches; a single replayed fetch records only the last one.
+DEPTH_HISTORY = [2, 3, 3, 5, 6, 6, 7, 5, 4, 4, 5, 3, 4]
 
 
 class Replay(Adapter):
@@ -60,6 +62,9 @@ async def settled(pilot) -> None:
     await pilot.pause()
     for source_id in app.updated:
         app.updated[source_id] = time.monotonic()
+    for strip in app.strips.values():
+        strip.depth.extendleft(reversed(DEPTH_HISTORY[:-1]))
+        strip.head()
     app.render_status()
     await pilot.pause()
 

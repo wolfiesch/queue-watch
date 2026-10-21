@@ -85,10 +85,13 @@ Screen { background: $surface; }
 .queue-head { height: 1; }
 .queue-head .queue-title { width: auto; }
 .queue-head .queue-eta { width: 1fr; min-width: 18; padding-left: 2; }
-.queue-head .trend-label { width: auto; margin-left: 2; }
-.-narrow .queue-head .trend-label { display: none; }
-.queue-head .trend { margin: 0 0 0 1; }
-.queue-head .trend-stats { width: auto; }
+.queue-head .spark-label { width: auto; margin-left: 2; }
+.queue-head .spark { margin: 0 1; }
+.queue-head .rate { width: auto; margin-left: 2; }
+.queue-head .took-stats { width: auto; }
+.queue-head .depth, .queue-head .took { display: none; }
+.queue.-depth .queue-head .depth, .queue.-took .queue-head .took { display: block; }
+.-narrow .queue .queue-head .spark, .-narrow .queue .queue-head .depth { display: none; }
 Sparkline > .sparkline--max-color { color: $error; }
 Sparkline > .sparkline--min-color { color: $success; }
 .chain { height: auto; }
@@ -308,6 +311,8 @@ class QueueWatch(App):
             self.errors.pop(source_id, None)
             await self.ensure_panes(source_id)
             await self.ensure_strip(source_id)
+            if source_id in self.strips:
+                self.strips[source_id].sample(snapshot["records"])
         except FETCH_ERRORS as error:
             self.errors[source_id] = clean(str(error) or type(error).__name__)
         finally:

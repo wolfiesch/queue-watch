@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import statistics
 import time
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -375,8 +376,12 @@ class QueueChip(Static):
         self.post_message(ChipClicked(self.source, self.record["id"]))
 
 
+DEPTH_SAMPLES = 120  # one per fetch: half an hour at the default 15 s interval
+SPARK_CELLS = 20
+
+
 class QueueStrip(Vertical):
-    """Header (count, ETA, attempt trend) over a FIFO chain of chips for one source."""
+    """Header (count, ETA, depth and attempt trends) over a FIFO chain of chips for one source."""
 
     def __init__(self, source: str, label: str) -> None:
         super().__init__(classes="queue")
@@ -385,15 +390,24 @@ class QueueStrip(Vertical):
         self.attempts: list[dict] = []
         self.by_record: dict[str, Change] = {}
         self.built: tuple | None = None
+        # Queue length after each fetch this session; sources keep no history of it.
+        self.depth: deque[int] = deque(maxlen=DEPTH_SAMPLES)
 
     def compose(self) -> ComposeResult:
         with Horizontal(classes="queue-head"):
             yield Static(classes="queue-title")
             yield Static(classes="queue-eta")
-            yield Static(dim("took "), classes="trend-label")
-            yield Sparkline([], classes="trend")
-            yield Static(classes="trend-stats")
+            yield Static(dim("depth"), classes="depth spark-label")
+            yield Sparkline([], classes="depth spark")
+            yield Static(classes="rate")
+            yield Static(dim("took"), classes="took spark-label")
+            yield Sparkline([], classes="took spark")
+            yield Static(classes="took took-stats")
         yield Horizontal(classes="chain")
+
+    def sample(self, records: list[dict]) -> None:
+        """Record the queue length of one fresh snapshot."""
+        self.depth.append(sum(r["kind"] == "queue_entry" for r in records))
 
     async def show(self, records: list[dict], by_record: dict[str, Change]) -> None:
         self.entries = chain_order([r for r in records if r["kind"] == "queue_entry"])
@@ -416,15 +430,29 @@ class QueueStrip(Vertical):
         self.query_one(".queue-eta", Static).update(
             Content.assemble(muted("clears in "), (eta_text(clears), "b")) if clears else ""
         )
+        # Visibility is by class so that the narrow layout's CSS can still hide sparklines.
+        self.set_class(len(self.depth) > 1, "-depth")
+        if len(self.depth) > 1:
+            depth = self.query_one(".depth.spark", Sparkline)
+            depth.data = list(self.depth)
+            depth.styles.width = min(len(self.depth), SPARK_CELLS)
+        merged = sum(
+            a["state"] == "success" and now() - stamp(a, "finished_at") <= 3600
+            for a in self.attempts
+        )
+        self.query_one(".rate", Static).update(
+            Content.assemble(glyph("success"), muted(f" {merged} merged/hr"))
+            if self.attempts
+            else ""
+        )
         took = [elapsed(a) for a in self.attempts[-30:]]
         failed = sum(a["state"] == "failure" for a in self.attempts[-30:])
-        trend = self.query_one(".trend", Sparkline)
-        for widget in (self.query_one(".trend-label"), trend, self.query_one(".trend-stats")):
-            widget.display = len(took) > 1
+        self.set_class(len(took) > 1, "-took")
         if len(took) > 1:
+            trend = self.query_one(".took.spark", Sparkline)
             trend.data = took
-            trend.styles.width = min(2 * len(took), 40)
-            self.query_one(".trend-stats", Static).update(
+            trend.styles.width = min(len(took), SPARK_CELLS)
+            self.query_one(".took-stats", Static).update(
                 Content.assemble(
                     muted(
                         f" median {human_seconds(statistics.median(took))} {SYMBOLS.dot} "

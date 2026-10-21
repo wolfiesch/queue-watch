@@ -153,6 +153,25 @@ def test_search_filters_changes_and_source_tables() -> None:
     asyncio.run(run())
 
 
+def test_queue_depth_is_sampled_once_per_fetch() -> None:
+    async def run() -> None:
+        app = QueueWatch(sources())
+        async with app.run_test(size=(160, 45)) as pilot:
+            await loaded(pilot)
+            strip = app.strips["mq"]
+            assert list(strip.depth) == [len(strip.entries)]
+            assert not strip.has_class("-depth")
+            # Redraws such as a search keystroke are not fetches and add no sample.
+            await pilot.press("slash", "x", "escape")
+            await pilot.pause()
+            assert len(strip.depth) == 1
+            await pilot.press("r")
+            await loaded(pilot)
+            assert len(strip.depth) == 2 and strip.has_class("-depth")
+
+    asyncio.run(run())
+
+
 def test_change_rows_exactly_fill_the_table_at_every_width() -> None:
     # Wider rows wrap in the OptionList; narrower ones leave the AGE column unaligned.
     for queue in (True, False):
