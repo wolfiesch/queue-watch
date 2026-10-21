@@ -560,9 +560,9 @@ class QueueWatch(App):
             change = self.changes.get(self.selected or "")
             target = ("change", self.selected)
             if change is None:
-                await inspector.show(
-                    dim("No change selected."), [], url=False, sha=False, reset=True
-                )
+                # Nothing is selected only when the table has no rows: say why, as it does.
+                reason = self.query_one(ChangeTable).empty
+                await inspector.show(dim(reason), [], url=False, sha=False, reset=True)
                 self.shown = target
                 return
             head, sections, lazy = self.change_view(change)

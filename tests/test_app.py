@@ -6,7 +6,7 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 
 from textual.content import Content
-from textual.widgets import OptionList, TabbedContent
+from textual.widgets import OptionList, Static, TabbedContent
 
 from queue_watch.adapters import Adapter
 from queue_watch.app import QueueWatch
@@ -172,9 +172,10 @@ def test_search_with_no_hits_names_the_query() -> None:
             await pilot.press("slash", *"zzz")
             await pilot.pause()
             rows = app.query_one("#rows", OptionList)
-            assert (
-                str(rows.get_option_at_index(0).prompt) == 'No changes match "zzz". esc to clear.'
-            )
+            reason = 'No changes match "zzz". esc to clear.'
+            assert str(rows.get_option_at_index(0).prompt) == reason
+            # The inspector gives the same reason instead of a bare "nothing selected".
+            assert str(app.query_one("#insp-head", Static).render()) == reason
 
     asyncio.run(run())
 
