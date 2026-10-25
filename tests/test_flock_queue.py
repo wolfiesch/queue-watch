@@ -11,6 +11,7 @@ import pytest
 
 from queue_watch.adapters import flock_queue
 from queue_watch.adapters.flock_queue import FlockQueue, flock_probe
+from queue_watch.changes import correlate
 from queue_watch.model import validate_snapshot
 
 OPTIONS = {
@@ -116,12 +117,40 @@ def test_git_dir_template_without_root_is_refused(world):
         flock_probe(OPTIONS, str(world.proc))
 
 
-def branch(world, name: str, subject: str) -> None:
+def branch(world, name: str, subject: str) -> str:
     """Commit ``subject`` on a new branch, the way a lane's work is titled."""
     git = ["git", "-C", str(world.repo), "-c", "user.name=t", "-c", "user.email=t@example.com"]
     subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "base"], check=True)
     subprocess.run([*git, "checkout", "-q", "-b", name], check=True)
     subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", subject], check=True)
+    return subprocess.run(
+        [*git, "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+def test_a_merged_lane_reaches_the_changes_tab_with_its_own_title(world, monkeypatch):
+    head = branch(world, "feat/lane", "test(wolfxl): record exact formula qualification evidence")
+    (world.git / "merge-history.jsonl").write_text(
+        f'{{"item":"lane","outcome":"merged","head":"{head}",'
+        '"finished_at":"2026-10-20T01:00:00+00:00"}\n'
+    )
+    real = flock_probe
+    monkeypatch.setattr(flock_queue, "flock_probe", lambda options: real(options, str(world.proc)))
+    snapshot = validate_snapshot(
+        asyncio.run(FlockQueue(**OPTIONS, root=str(world.repo)).snapshot())
+    )
+    (attempt,) = [r for r in snapshot["records"] if r["kind"] == "attempt"]
+    assert (attempt["ref"], attempt["sha"], attempt["title"]) == (
+        "lane",
+        head,
+        "test(wolfxl): record exact formula qualification evidence",
+    )
+    (change,) = correlate({"q": snapshot})
+    assert (change.group, change.state, change.title) == (
+        "done",
+        "success",
+        "test(wolfxl): record exact formula qualification evidence",
+    )
 
 
 def test_an_item_named_after_a_branch_takes_its_commit_subject(world):

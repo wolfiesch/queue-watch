@@ -125,6 +125,8 @@ Merge queue states map as `QUEUED` and `MERGEABLE` to queued, `AWAITING_CHECKS` 
 
 An item that names a branch in `root`, bare or under a prefix such as `feat/`, is titled by that branch's head commit subject, so a chip reads as the change instead of a slug; the item name stays as the record's subtitle. An item with no such branch keeps its own name.
 
+Each attempt in the history log keeps its item as `ref`, the lane head or merge commit as `sha`, and the same commit subject as its title. A lane therefore moves from chip to Changes tab: once its attempt is logged it appears under Done (or with a failure) instead of vanishing from the dashboard.
+
 ### Command sources
 
 Use the `command` adapter for GitLab, Buildkite, Jenkins, Bors or an in-house queue. `command` is an argument list run without a shell. Locally it runs in `cwd`, which defaults to the config file's directory; relative paths resolve against that directory too. With `host` set, it runs over SSH (`BatchMode`, every argument quoted for the remote shell), in `cwd` on the host when given.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.0 - 2026-10-25
+
+- A merged lane now reaches the Changes tab. `flock-queue` history records carry the lane as `ref`, the lane head or merge commit as `sha`, and the commit subject as `title`, so an integration lane appears under Done with the title its chip showed instead of disappearing when it leaves the queue. Refused and failed attempts appear too, so a lane that keeps failing is visible as a change.
+- The Changes table keeps its `TITLE` column in merge-queue layouts: the owner column now gives way first, and a title stays down to about 96 columns where before both columns were dropped below roughly 118.
+
 ## 0.6.0 - 2026-10-25
 
 - Queue chips read as the change, not a slug: when an item names a branch in the source's `root`, the `flock-queue` adapter titles the entry with that branch's head commit subject and keeps the item name as the record's subtitle, shown in the inspector and the chip tooltip. The lookup is one local `git for-each-ref` inside the existing probe, and an item with no matching branch keeps its own name.
