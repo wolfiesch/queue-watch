@@ -116,6 +116,43 @@ def test_git_dir_template_without_root_is_refused(world):
         flock_probe(OPTIONS, str(world.proc))
 
 
+def branch(world, name: str, subject: str) -> None:
+    """Commit ``subject`` on a new branch, the way a lane's work is titled."""
+    git = ["git", "-C", str(world.repo), "-c", "user.name=t", "-c", "user.email=t@example.com"]
+    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "base"], check=True)
+    subprocess.run([*git, "checkout", "-q", "-b", name], check=True)
+    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", subject], check=True)
+
+
+def test_an_item_named_after_a_branch_takes_its_commit_subject(world):
+    branch(world, "feat/lane", "test(wolfxl): record exact formula qualification evidence")
+    world.process(100, "python3", "scripts/merge.py", "lane")
+    (row,) = world.probe()["queue"]
+    assert (row["item"], row["title"]) == (
+        "lane",
+        "test(wolfxl): record exact formula qualification evidence",
+    )
+
+
+def test_an_item_with_no_matching_branch_keeps_its_own_name(world):
+    branch(world, "feat/other", "fix(xl): something else")
+    world.process(100, "python3", "scripts/merge.py", "retired-lane")
+    (row,) = world.probe()["queue"]
+    assert (row["item"], row.get("title")) == ("retired-lane", None)
+
+
+def test_snapshot_names_the_branch_title_and_keeps_the_item_as_subtitle(world, monkeypatch):
+    branch(world, "lane", "fix(xl): keep merged titles readable")
+    world.process(100, "python3", "scripts/merge.py", "lane")
+    real = flock_probe
+    monkeypatch.setattr(flock_queue, "flock_probe", lambda options: real(options, str(world.proc)))
+    snapshot = validate_snapshot(
+        asyncio.run(FlockQueue(**OPTIONS, root=str(world.repo)).snapshot())
+    )
+    (record,) = [r for r in snapshot["records"] if r["kind"] == "queue_entry"]
+    assert (record["title"], record["subtitle"]) == ("fix(xl): keep merged titles readable", "lane")
+
+
 def test_snapshot_normalizes_states_and_keeps_extra_history_fields(world, monkeypatch):
     world.process(100, "python3", "merge.py", "head")
     world.process(200, "python3", "merge.py", "next")

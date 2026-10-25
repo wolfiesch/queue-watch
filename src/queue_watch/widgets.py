@@ -380,7 +380,10 @@ class QueueChip(Static):
         state = glyph(self.record["state"])
         self.full = Content.assemble((title, "b"), "\n", state, f" {raw(self.record)}", *tail)
         self.line = Content.assemble(muted(f"{label} "), state, " ", (title, "b"), *tail)
-        self.tooltip = Content(f"{title}\n{raw(self.record)}")
+        detail = [title]
+        if (name := self.record.get("subtitle")) and name != self.record["title"]:
+            detail.append(clean(name))
+        self.tooltip = Content("\n".join([*detail, raw(self.record)]))
         self.refresh()
 
     def render(self) -> Content:
