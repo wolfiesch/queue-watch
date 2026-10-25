@@ -213,6 +213,12 @@ def cell(app: App, record: dict, column: dict) -> Text:
             return Text(duration(value))
         case "sha":
             return Text(clean(value or "")[:8], style=rich_style(app, MUTED))
+        case "pr":
+            return (
+                Text(f"#{value}", style=rich_style(app, MUTED))
+                if isinstance(value, int)
+                else Text("-", style=rich_style(app, MUTED))
+            )
     return Text(clean(value) if value is not None else "-")
 
 

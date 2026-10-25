@@ -18,7 +18,8 @@ one of STATES; adapters keep their own vocabulary in ``raw_state``. ``ref`` and
 Optional: ``raw_state``, ``subtitle``, ``ref``, ``sha``, ``repo``, ``owner``,
 ``position`` (int), ``created_at``, ``updated_at``, ``started_at``, ``finished_at``
 (ISO 8601), ``url``, ``fields`` (JSON object for the inspector) and ``children``
-(records, for example jobs and steps).
+(records, for example jobs and steps). ``fields.pull_request`` (int) names the pull
+request a record belongs to; views and the inspector show it as ``#123``.
 
 View: ``{"kind", "label", "columns": [{"key", "label", "width", "format"}]}``.
 A column key is a record field name or ``fields.<name>``; FORMATS lists formats.
@@ -42,7 +43,7 @@ STATES = (
 )
 ACTIVE = frozenset({"queued", "running", "blocked"})
 ATTENTION = frozenset({"failure", "blocked"})
-FORMATS = ("text", "state", "clock", "age", "seconds", "duration", "sha")
+FORMATS = ("text", "state", "clock", "age", "seconds", "duration", "sha", "pr")
 TIME_FIELDS = ("created_at", "updated_at", "started_at", "finished_at")
 TEXT_FIELDS = ("raw_state", "subtitle", "ref", "sha", "repo", "owner", "url")
 

@@ -29,12 +29,22 @@ STATES = {
     "stale": "neutral",
 }
 PAGE = 100
+PULLS = 100  # recently updated pull requests indexed per refresh, to name merged ones
 ETAGS = 200  # cached responses kept for revalidation: the run lists plus recent job lists
 
 
 def state_of(item: dict) -> tuple[str, str]:
     raw = item.get("conclusion") or item.get("status") or "unknown"
     return STATES.get(raw, "unknown"), raw
+
+
+def pull_request_of(run: dict) -> int | None:
+    """The pull request a run belongs to; a push to a branch has none."""
+    for pull in run.get("pull_requests") or []:
+        number = pull.get("number")
+        if isinstance(number, int):
+            return number
+    return None
 
 
 class GitHubActions(Adapter):
@@ -82,6 +92,22 @@ class GitHubActions(Adapter):
                 self.etags.pop(next(iter(self.etags)))
         return data, more
 
+    async def pull_numbers(self) -> dict[str, int]:
+        """Pull request numbers by head commit, for the recently updated ones.
+
+        GitHub empties a run's ``pull_requests`` once the pull request closes, so a
+        merged branch would lose its number; this list keeps it. Head commits are
+        exact, unlike branch names that get reused.
+        """
+        endpoint = f"repos/{self.repo}/pulls?state=all&sort=updated&direction=desc&per_page={PULLS}"
+        page, _ = await self.get(endpoint)
+        numbers: dict[str, int] = {}
+        for pull in page if isinstance(page, list) else ():
+            number, head = pull.get("number"), pull.get("head") or {}
+            if isinstance(number, int) and (commit := head.get("sha")):
+                numbers.setdefault(commit, number)
+        return numbers
+
     async def snapshot(self) -> dict:
         # Fetch each active state separately: an old queued run must not disappear
         # behind a page of newer completed runs. GitHub caps each search at 1000.
@@ -93,7 +119,9 @@ class GitHubActions(Adapter):
             return page
 
         statuses = (*ACTIVE_STATUSES, None)
-        pages = await asyncio.gather(*(fetch(status) for status in statuses))
+        *pages, pulls = await asyncio.gather(
+            *(fetch(status) for status in statuses), self.pull_numbers()
+        )
         runs: dict[int, dict] = {}
         warnings = []
         for status, page in zip(statuses, pages, strict=True):
@@ -114,13 +142,14 @@ class GitHubActions(Adapter):
         return {
             "schema": SCHEMA,
             "observed_at": datetime.now(UTC).isoformat(),
-            "records": [{**self.record(run), "repo": self.repo} for run in ordered],
+            "records": [{**self.record(run, pulls), "repo": self.repo} for run in ordered],
             "views": [
                 {
                     "kind": "run",
                     "label": "Runs",
                     "columns": [
                         {"key": "state", "label": "State", "width": 12, "format": "state"},
+                        {"key": "fields.pull_request", "label": "PR", "width": 7, "format": "pr"},
                         {"key": "title", "label": "Workflow / title", "width": 25},
                         {"key": "ref", "label": "Branch", "width": 18},
                         {"key": "sha", "label": "SHA", "width": 8, "format": "sha"},
@@ -129,12 +158,19 @@ class GitHubActions(Adapter):
                 }
             ],
             "warnings": warnings,
-            "note": f"Up to {PAGE} runs per active state plus the {PAGE} most recent.",
+            "note": f"Up to {PAGE} runs per active state plus the {PAGE} most recent. PR "
+            f"numbers also come from the {PULLS} most recently updated pull requests.",
         }
 
     @staticmethod
-    def record(run: dict) -> dict:
+    def record(run: dict, pulls: dict[str, int] | None = None) -> dict:
         state, raw = state_of(run)
+        pull = pull_request_of(run)
+        if pull is None:
+            pull = (pulls or {}).get(run.get("head_sha") or "")
+        fields = {"run": run["id"], "attempt": run.get("run_attempt")}
+        if pull is not None:
+            fields["pull_request"] = pull
         return {
             "id": str(run["id"]),
             "kind": "run",
@@ -147,7 +183,7 @@ class GitHubActions(Adapter):
             "created_at": iso(run.get("created_at")),
             "updated_at": iso(run.get("updated_at")),
             "url": run.get("html_url"),
-            "fields": {"run": run["id"], "attempt": run.get("run_attempt")},
+            "fields": fields,
         }
 
     async def children(self, record: dict) -> list[dict]:

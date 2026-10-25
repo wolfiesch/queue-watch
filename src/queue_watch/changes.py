@@ -106,10 +106,12 @@ class Change:
 
     @property
     def pr(self) -> int | None:
-        if self.entry and isinstance(
-            number := (self.entry.record.get("fields") or {}).get("pull_request"), int
-        ):
-            return number
+        """The pull request this change belongs to, from a queue entry, a run, a title."""
+        for hit in (self.entry, *self.runs, *self.attempts):
+            if hit and isinstance(
+                number := (hit.record.get("fields") or {}).get("pull_request"), int
+            ):
+                return number
         for hit in (self.entry, *self.attempts):
             if hit and (match := re.match(r"#(\d+)\b", hit.record["title"])):
                 return int(match.group(1))

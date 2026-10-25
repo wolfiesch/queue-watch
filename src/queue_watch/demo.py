@@ -110,6 +110,7 @@ class Run:
     start: int  # tick
     end: int  # tick the run finishes
     outcome: str  # final state: success or failure
+    pull: int | None = None  # pull request the run belongs to, as GitHub reports it
 
     def state(self, tick: int) -> str:
         return "running" if tick < self.end else self.outcome
@@ -162,10 +163,19 @@ class Simulation:
             self.tick += 1
             self.step()
 
-    def start_run(self, workflow: str, title: str, ref: str, ticks: int, salt: int, outcome: str):
+    def start_run(
+        self,
+        workflow: str,
+        title: str,
+        ref: str,
+        ticks: int,
+        salt: int,
+        outcome: str,
+        pull: int | None = None,
+    ):
         run = Run(
             self.repo.first_run + self.started, workflow, title, ref, sha(self.repo.name, ref, salt),
-            self.tick, self.tick + ticks, outcome,
+            self.tick, self.tick + ticks, outcome, pull,
         )  # fmt: skip
         self.started += 1
         self.runs.append(run)
@@ -183,7 +193,7 @@ class Simulation:
                 entry.fails = False
                 entry.run = self.start_run(
                     "CI", entry.title, entry.ref, CHECK_TICKS[entry.number % len(CHECK_TICKS)],
-                    tick, "success",
+                    tick, "success", entry.number,
                 )  # fmt: skip
                 entry.state, entry.since = "checks", tick
         head = next((e for e in self.queue if e.state == "merging"), None)
@@ -227,7 +237,9 @@ class Simulation:
         number = self.repo.first_pull + self.pulls
         fails = phase % FAILS_EVERY == FAILS_EVERY - 1
         ticks = CHECK_TICKS[phase % len(CHECK_TICKS)]
-        run = self.start_run("CI", title, ref, ticks, self.tick, "failure" if fails else "success")
+        run = self.start_run(
+            "CI", title, ref, ticks, self.tick, "failure" if fails else "success", number
+        )
         self.queue.append(Entry(number, title, ref, owner, self.tick, run, fails, since=self.tick))
         self.next_arrival = self.tick + ARRIVAL_GAPS[phase % len(ARRIVAL_GAPS)]
         self.pulls += 1
@@ -255,6 +267,9 @@ class Simulation:
                 job["finished_at"] = iso(self.at(end))
                 job["fields"]["duration_seconds"] = (end - start) * STEP
             jobs.append(job)
+        fields: dict = {"run_id": run.id, "attempt": 1}
+        if run.pull is not None:
+            fields["pull_request"] = run.pull
         return {
             "id": str(run.id),
             "kind": "run",
@@ -268,7 +283,7 @@ class Simulation:
             "created_at": iso(self.at(run.start)),
             "updated_at": iso(self.at(min(self.tick, run.end))),
             "url": f"{self.repo.url}/actions/runs/{run.id}",
-            "fields": {"run_id": run.id, "attempt": 1},
+            "fields": fields,
             "children": jobs,
         }
 
