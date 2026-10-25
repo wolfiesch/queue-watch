@@ -68,6 +68,41 @@ def flock_probe(options: dict, proc_root: str = "/proc") -> dict:
             raise ValueError("{git_dir} needs the root option")
         return os.path.expanduser(template.replace("{git_dir}", git_dir))
 
+    def subjects():
+        """Head commit subject by branch name, and by its last path segment.
+
+        A queue item often names the branch being merged (``lane``, ``feat/lane``),
+        so the commit subject reads as the change's title where the item name alone
+        does not. Titles are a nicety: any failure leaves the item name.
+        """
+        if not options.get("root"):
+            return {}
+        try:
+            listing = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    os.path.expanduser(options["root"]),
+                    "for-each-ref",
+                    "--format=%(refname:short)%09%(contents:subject)",
+                    "refs/heads/",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=10,
+            ).stdout
+        except (OSError, subprocess.SubprocessError):
+            return {}
+        exact, trailing = {}, {}
+        for line in listing.splitlines():
+            ref, _, subject = line.partition("\t")
+            if not subject.strip():
+                continue
+            exact.setdefault(ref, subject)
+            trailing.setdefault(ref.rsplit("/", 1)[-1], subject)
+        return {**trailing, **exact}  # An exact branch name wins over a segment match.
+
     proc = Path(proc_root)
     locks = {}
     for line in (proc / "locks").read_text().splitlines():
@@ -182,6 +217,10 @@ def flock_probe(options: dict, proc_root: str = "/proc") -> dict:
                     "pid": int(entry.name),
                 }
             )
+    titles = subjects() if rows else {}
+    for row in rows:
+        if (title := titles.get(row["item"])) and title != row["item"]:
+            row["title"] = title
     limit = int(options.get("history_limit", 30))
     recent, malformed = [], 0
     if options.get("history"):
@@ -270,19 +309,21 @@ class FlockQueue(Adapter):
         raw = await self.probe()
         records = []
         for row in raw["queue"]:
-            records.append(
-                {
-                    "id": row["id"],
-                    "kind": "queue_entry",
-                    "state": "queued" if row["state"] == "queued" else "running",
-                    "raw_state": row["state"],
-                    "title": row["item"],
-                    "owner": row.get("owner"),
-                    "position": row.get("position"),
-                    "created_at": row.get("since"),
-                    "fields": {key: row[key] for key in ("pid", "ticket") if key in row},
-                }
-            )
+            entry = {
+                "id": row["id"],
+                "kind": "queue_entry",
+                "state": "queued" if row["state"] == "queued" else "running",
+                "raw_state": row["state"],
+                "title": row.get("title") or row["item"],
+                "owner": row.get("owner"),
+                "position": row.get("position"),
+                "created_at": row.get("since"),
+                "fields": {key: row[key] for key in ("pid", "ticket") if key in row},
+            }
+            if entry["title"] != row["item"]:
+                # The item names the branch; the title stands in for its change.
+                entry["subtitle"] = row["item"]
+            records.append(entry)
         for index, entry in enumerate(raw["history"]):
             outcome = str(entry.get("outcome", "unknown"))
             records.append(

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0 - 2026-10-25
+
+- Queue chips read as the change, not a slug: when an item names a branch in the source's `root`, the `flock-queue` adapter titles the entry with that branch's head commit subject and keeps the item name as the record's subtitle, shown in the inspector and the chip tooltip. The lookup is one local `git for-each-ref` inside the existing probe, and an item with no matching branch keeps its own name.
+
 ## 0.5.0 - 2026-10-25
 
 - Every row now names its pull request. The `github-actions` adapter keeps the PR a run belongs to (`pull_requests` in GitHub's API, which it used to drop) in `fields.pull_request`, so a change whose only source is CI shows its number in the Changes table instead of a blank PR cell. The Runs table gains a `PR` column, the inspector lists the number, and the new `pr` column format renders `#123`.
