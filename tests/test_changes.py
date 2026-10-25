@@ -83,6 +83,17 @@ def test_queue_state_outranks_green_ci_and_finished_changes_fall_to_done() -> No
     }
 
 
+def test_a_run_names_its_pull_request_even_when_no_queue_entry_does() -> None:
+    run = record(
+        "r1", "run", "running", title="CI", ref="release/1.0", fields={"pull_request": 284}
+    )
+    (change,) = correlate({"ci": snap(run)})
+    assert change.pr == 284
+    # A push to a branch belongs to no pull request.
+    push = record("r2", "run", "success", title="CI", ref="main")
+    assert correlate({"ci": snap(push)})[0].pr is None
+
+
 def test_same_branch_in_different_repositories_stays_apart() -> None:
     api = snap(
         record("r1", "run", "success", ref="main", sha="a1", repo="acme/api"),

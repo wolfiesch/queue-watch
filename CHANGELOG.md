@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0 - 2026-10-25
+
+- Every row now names its pull request. The `github-actions` adapter keeps the PR a run belongs to (`pull_requests` in GitHub's API, which it used to drop) in `fields.pull_request`, so a change whose only source is CI shows its number in the Changes table instead of a blank PR cell. The Runs table gains a `PR` column, the inspector lists the number, and the new `pr` column format renders `#123`.
+- Merged pull requests keep their number: GitHub empties a run's `pull_requests` once the PR closes, so the adapter also indexes the 100 most recently updated pull requests by head commit, over one ETag-revalidated request per refresh.
+- Merge-queue entries and attempts keep naming their PR through the same field, so one lookup resolves the number wherever it is known.
+- `--demo` runs carry PR numbers the way GitHub reports them, so the demo shows the same columns as a real repository.
+
 ## 0.4.0 - 2026-10-21
 
 - The `github-actions` adapter sends each list's last ETag back with `If-None-Match`. GitHub does not count a `304 Not Modified` against the API rate limit, so run lists and job lists that have not changed since the last refresh no longer use up the account's hourly budget. Against a busy repository, 5 of the 6 run-list requests per refresh came back unchanged.

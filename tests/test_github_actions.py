@@ -79,6 +79,62 @@ def test_old_active_runs_survive_recent_page_and_newer_state_wins(monkeypatch):
     assert snapshot["warnings"] == ["queued: showing first 100 of 101 runs"]
 
 
+def test_runs_carry_the_pull_request_they_belong_to(monkeypatch):
+    runs = [
+        {
+            "id": 21,
+            "status": "completed",
+            "conclusion": "success",
+            "name": "CI",
+            "head_branch": "release/wolf-0.2.7",
+            "pull_requests": [{"number": 284}],
+        },
+        {
+            "id": 22,
+            "status": "completed",
+            "conclusion": "success",
+            "name": "CI",
+            "head_branch": "main",
+            "pull_requests": [],
+        },
+    ]
+
+    async def response(argv):
+        return http({"total_count": 2, "workflow_runs": runs})
+
+    monkeypatch.setattr(github_actions.process, "capture", response)
+    snapshot = validate_snapshot(asyncio.run(GitHubActions(repo="owner/repo").snapshot()))
+    fields = {record["id"]: record["fields"] for record in snapshot["records"]}
+    assert fields["21"]["pull_request"] == 284
+    assert "pull_request" not in fields["22"]
+
+
+def test_a_merged_pull_request_still_names_its_runs(monkeypatch):
+    run = {
+        "id": 31,
+        "status": "completed",
+        "conclusion": "success",
+        "name": "CI",
+        "head_branch": "fix/x",
+        "head_sha": "abc123",
+        "pull_requests": [],  # GitHub empties this once the pull request closes
+    }
+    pulls = [
+        {"number": 285, "head": {"sha": "abc123", "ref": "fix/x"}},
+        {"number": 284, "head": {"sha": "def456", "ref": "release/1"}},
+    ]
+
+    async def response(argv):
+        endpoint = endpoint_of(argv)
+        if "/pulls?" in endpoint:
+            return http(pulls)
+        return http({"total_count": 1, "workflow_runs": [run]})
+
+    monkeypatch.setattr(github_actions.process, "capture", response)
+    snapshot = validate_snapshot(asyncio.run(GitHubActions(repo="owner/repo").snapshot()))
+    assert [record["fields"]["pull_request"] for record in snapshot["records"]] == [285]
+
+
 def test_jobs_become_child_records_with_steps_across_pages(monkeypatch):
     async def first_page(argv):
         if 'If-None-Match: W/"j"' in argv:
@@ -148,7 +204,8 @@ def test_unchanged_lists_are_revalidated_and_reuse_the_cached_body(monkeypatch):
         return [r["id"] for r in asyncio.run(adapter.snapshot())["records"]]
 
     assert ids() == ["1"]
-    assert sent == [None] * 6
+    # Six run lists plus the pull request index, none of them cached yet.
+    assert sent == [None] * 7
     sent.clear()
     assert ids() == ["1"]  # every list answered 304
     assert all(header and header.startswith("If-None-Match: ") for header in sent)
