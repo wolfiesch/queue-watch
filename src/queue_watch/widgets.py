@@ -583,10 +583,14 @@ class Column:
     align: str = "left"
 
 
+MIN_TITLE = 10  # Narrower than this a title is not worth the columns it displaces
+
+
 def change_columns(width: int, queue: bool, comfortable: bool = False) -> list[Column]:
     """Columns for a table ``width`` cells wide; narrow tables keep the essentials.
 
     Comfortable rows carry title, owner and PR on a second line, so those columns go.
+    Where the owner column no longer fits, the title stays: it says what the change is.
     """
     roomy = width >= 96
     wide = roomy and not comfortable
@@ -597,10 +601,17 @@ def change_columns(width: int, queue: bool, comfortable: bool = False) -> list[C
     if queue:
         cols.append(Column("queue", "QUEUE", 24 if roomy else 16))
     cols.append(Column("age", "AGE", 4, "right"))
-    flex = width - sum(c.width for c in cols) - (len(cols) - 1)
-    if not wide or flex < 12:
+
+    def spare(columns: list[Column]) -> int:
+        return width - sum(c.width for c in columns) - (len(columns) - 1)
+
+    flex = spare(cols)
+    if wide and flex < MIN_TITLE:
+        cols = [c for c in cols if c.key != "owner"]
+        flex = spare(cols)
+    if not wide or flex < MIN_TITLE:
         cols = [c for c in cols if c.key not in ("title", "owner")]
-        flex = width - sum(c.width for c in cols) - (len(cols) - 1)
+        flex = spare(cols)
         if flex >= 0:
             cols[1].width += flex
         # Too narrow: give back cells from the text columns, down to a readable minimum.

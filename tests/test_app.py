@@ -304,6 +304,14 @@ def test_change_rows_exactly_fill_the_table_at_every_width() -> None:
                     assert not {"pr", "title", "owner"} & {c.key for c in cols}
 
 
+def test_a_queue_layout_drops_the_owner_column_before_the_title() -> None:
+    # A title says what the change is; the owner is the first column to give way.
+    keys = [c.key for c in change_columns(98, queue=True)]
+    assert "title" in keys and "owner" not in keys
+    assert "title" in {c.key for c in change_columns(150, queue=True)}
+    assert "title" not in {c.key for c in change_columns(80, queue=True)}
+
+
 def test_density_toggle_moves_title_owner_and_pr_to_a_second_line() -> None:
     async def run() -> None:
         app = QueueWatch(sources(), density="comfortable")

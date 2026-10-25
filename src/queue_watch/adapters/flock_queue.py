@@ -42,7 +42,16 @@ OUTCOMES = {
     "error": "failure",
     "cancelled": "cancelled",
 }
-HISTORY_KEYS = {"item", "outcome", "started_at", "finished_at"}
+HISTORY_KEYS = {"item", "outcome", "started_at", "finished_at", "title"}
+
+
+def commit_sha(record: dict) -> str | None:
+    """The commit a history record names: the lane head, else its merge commit."""
+    for key in ("head", "lane_head", "merge_commit"):
+        value = record.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
 
 
 # Shipped to the queue host over stdin, so it must stay self-contained.
@@ -102,6 +111,51 @@ def flock_probe(options: dict, proc_root: str = "/proc") -> dict:
             exact.setdefault(ref, subject)
             trailing.setdefault(ref.rsplit("/", 1)[-1], subject)
         return {**trailing, **exact}  # An exact branch name wins over a segment match.
+
+    def commit_subjects(shas):
+        """Commit subject by sha, skipping commits this checkout no longer has."""
+        if not shas or not options.get("root"):
+            return {}
+        root = os.path.expanduser(options["root"])
+        try:
+            shipped = subprocess.run(
+                ["git", "-C", root, "cat-file", "--batch-check"],
+                input="\n".join(shas) + "\n",
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=10,
+            ).stdout
+            present = [
+                fields[0]
+                for line in shipped.splitlines()
+                if len(fields := line.split()) > 1 and fields[1] != "missing"
+            ]
+            if not present:
+                return {}
+            listing = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    root,
+                    "log",
+                    "--no-walk=unsorted",
+                    "--format=%H%x09%s",
+                    *present,
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=10,
+            ).stdout
+        except (OSError, subprocess.SubprocessError):
+            return {}
+        titles = {}
+        for line in listing.splitlines():
+            commit, _, subject = line.partition("\t")
+            if subject.strip():
+                titles.setdefault(commit, subject)
+        return titles
 
     proc = Path(proc_root)
     locks = {}
@@ -244,6 +298,16 @@ def flock_probe(options: dict, proc_root: str = "/proc") -> dict:
                     malformed += 1
         except FileNotFoundError:
             pass
+    named = {
+        sha
+        for entry in recent
+        if (sha := entry.get("head") or entry.get("lane_head") or entry.get("merge_commit"))
+    }
+    by_commit = commit_subjects(named)
+    for entry in recent:
+        sha = entry.get("head") or entry.get("lane_head") or entry.get("merge_commit")
+        if (subject := by_commit.get(sha)) and subject != entry["item"]:
+            entry["title"] = subject
     warnings = []
     if malformed:
         warnings.append(f"Skipped {malformed} malformed history records")
@@ -326,13 +390,18 @@ class FlockQueue(Adapter):
             records.append(entry)
         for index, entry in enumerate(raw["history"]):
             outcome = str(entry.get("outcome", "unknown"))
+            item = str(entry["item"])
             records.append(
                 {
-                    "id": f"attempt:{index}:{entry.get('item')}:{entry.get('finished_at')}",
+                    "id": f"attempt:{index}:{item}:{entry.get('finished_at')}",
                     "kind": "attempt",
                     "state": OUTCOMES.get(outcome, "unknown"),
                     "raw_state": outcome,
-                    "title": str(entry["item"]),
+                    # The lane names the change, the commit titles it, so a merged
+                    # lane reads in the Changes tab as it did in the queue.
+                    "title": str(entry.get("title") or item),
+                    "ref": item,
+                    "sha": commit_sha(entry),
                     "started_at": timestamp(entry.get("started_at")),
                     "finished_at": timestamp(entry.get("finished_at")),
                     "fields": {
